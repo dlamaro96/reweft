@@ -1,0 +1,8 @@
+{
+  "fixture": "synthetic",
+  "name": "atlas_year_end_dispatch",
+  "schedule": "year-end; exact business calendar unresolved",
+  "inputs": ["ops_atlas.year_end_dispatches", "ATLAS_ADJUSTED_QUERY"],
+  "output": {"kind": "delimited_file", "name": "year_end_dispatch.csv", "consumer": "unresolved-external-boundary"},
+  "execution": "definition only; fixture code is never executed"
+}

@@ -8,7 +8,10 @@ RUN addgroup --system reweft \
     && mkdir -p /var/lib/reweft/evidence \
     && chown -R reweft:reweft /var/lib/reweft
 COPY backend/pyproject.toml backend/uv.lock /app/backend/
+COPY backend/alembic.ini /app/backend/alembic.ini
+COPY backend/migrations /app/backend/migrations
 COPY backend/src /app/backend/src
+COPY deploy/docker/prepare-real-api.sh /usr/local/bin/prepare-real-api
 RUN python -m pip install --no-cache-dir uv==0.11.14 \
     && cd /app/backend \
     && uv sync --frozen --no-dev

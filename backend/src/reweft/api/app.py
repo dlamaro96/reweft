@@ -1,5 +1,6 @@
 import json
 import os
+import hmac
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated, Any
@@ -7,6 +8,7 @@ from uuid import UUID, uuid4
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from reweft.auth import AuthContext, AuthService
@@ -29,8 +31,15 @@ from reweft.domain.models import (
     SourcePolicy,
 )
 from reweft.persistence import Database
+from reweft.runtime.models import (
+    ArtifactBundleConfiguration,
+    PostgresSourceConfiguration,
+    SourceRecord,
+)
 from reweft.source_control import AdmissionError, WorkloadController
 from reweft.source_control.controller import generate_signing_key
+
+from .runtime import TemporalRuntime, assessment_payload, build_export, json_value, run_async, run_state
 
 
 def _now() -> datetime:
@@ -52,6 +61,32 @@ class BootstrapRequest(BaseModel):
 
 class ProjectCreate(BaseModel):
     name: str = Field(min_length=1, max_length=100)
+
+
+class SourceScope(BaseModel):
+    schemas: list[str] = Field(min_length=1, max_length=32)
+
+
+class PostgreSQLSourceRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    host: str = Field(min_length=1, max_length=253)
+    port: int = Field(default=5432, ge=1, le=65535)
+    database: str = Field(min_length=1, max_length=63)
+    username: str = Field(min_length=1, max_length=128)
+    credential_ref: str = Field(pattern=r"^secret://source/[A-Za-z0-9_./-]+$")
+    sslmode: str = "verify-full"
+    scope: SourceScope
+    resource_fingerprint: str | None = Field(default=None, min_length=16, max_length=255)
+    statement_timeout_ms: int = Field(default=15_000, ge=100, le=120_000)
+    max_objects: int = Field(default=2_000, ge=1, le=10_000)
+
+
+class ArtifactBundleSourceRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    bundle_id: str = Field(min_length=1, max_length=100, pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+    max_files: int = Field(default=100, ge=1, le=500)
+    max_file_bytes: int = Field(default=4_194_304, ge=1, le=33_554_432)
+    max_total_bytes: int = Field(default=33_554_432, ge=1, le=134_217_728)
 
 
 class ResourceGroupCreate(BaseModel):
@@ -107,20 +142,32 @@ def create_app(
     bootstrap_token: str | None = None,
     permit_signing_key: bytes | None = None,
 ) -> FastAPI:
-    path = database_path or os.getenv("REWEFT_DATABASE_PATH", ".data/reweft.db")
+    runtime_mode = os.getenv("REWEFT_MODE", "synthetic_demo")
+    path = database_path or os.getenv("DATABASE_URL") or os.getenv("REWEFT_DATABASE_PATH", ".data/reweft.db")
     database = Database(path)
     database.initialize()
     auth = AuthService(database)
     initial_token = bootstrap_token or os.getenv("REWEFT_BOOTSTRAP_TOKEN") or generate_bootstrap_token()
     auth.install_bootstrap_token(initial_token)
+    key_file = os.getenv("REWEFT_PERMIT_SIGNING_KEY_FILE")
     configured_key = os.getenv("REWEFT_PERMIT_SIGNING_KEY") or os.getenv("REWEFT_SECRET_KEY")
-    key = permit_signing_key or (configured_key.encode() if configured_key else generate_signing_key())
+    if permit_signing_key:
+        key = permit_signing_key
+    elif key_file:
+        key = Path(key_file).read_bytes()
+    elif configured_key:
+        key = configured_key.encode()
+    else:
+        key = generate_signing_key()
     controller = WorkloadController(database, key)
+    temporal = TemporalRuntime()
+    is_demo = runtime_mode in {"synthetic_demo", "synthetic-demo", "demo"}
 
     app = FastAPI(title="Reweft API", version="0.1.0", openapi_url="/api/v1/openapi.json")
     app.state.database = database
     app.state.auth = auth
     app.state.controller = controller
+    app.state.temporal = temporal
     # Available to local launcher/test code, never returned from an HTTP route or log.
     app.state.initial_bootstrap_token = initial_token
     app.add_middleware(
@@ -155,12 +202,33 @@ def create_app(
     def translate_admission(exc: AdmissionError) -> None:
         raise HTTPException(exc.status_code, {"code": exc.code, "message": exc.detail}) from exc
 
+    def service_authorized(authorization: str | None, expected: str | None) -> bool:
+        if not expected or not authorization or not authorization.startswith("Bearer "):
+            return False
+        return hmac.compare_digest(authorization.removeprefix("Bearer ").strip(), expected)
+
+    def persistence_label() -> str:
+        return "postgresql" if database.dialect_name == "postgresql" else "sqlite-development"
+
+    @app.get("/api/v1/runtime")
+    def runtime_descriptor() -> dict[str, Any]:
+        with database.connect() as connection:
+            bootstrapped = bool(connection.execute("SELECT 1 FROM users LIMIT 1").fetchone())
+        return {
+            "mode": "synthetic-demo" if is_demo else ("live" if bootstrapped else "bootstrap"),
+            "bootstrapped": bootstrapped,
+            "bootstrap_required": not bootstrapped,
+            "api_version": "v1",
+            "demo_available": True,
+            "persistence": persistence_label(),
+        }
+
     @app.get("/api/v1/health")
     @app.get("/health", include_in_schema=False)
     def health() -> dict[str, Any]:
         with database.connect() as connection:
             bootstrapped = bool(connection.execute("SELECT 1 FROM users LIMIT 1").fetchone())
-        return {"status": "ok", "persistence": "sqlite-development", "bootstrapped": bootstrapped}
+        return {"status": "ok", "persistence": persistence_label(), "bootstrapped": bootstrapped, "mode": "demo" if is_demo else "live"}
 
     @app.post("/api/v1/auth/bootstrap", status_code=201)
     def bootstrap(body: BootstrapRequest) -> dict[str, Any]:
@@ -190,6 +258,121 @@ def create_app(
         with database.connect() as connection:
             return [dict(row) for row in connection.execute("SELECT id,workspace_id,name,created_at FROM projects WHERE workspace_id=? ORDER BY created_at", (str(workspace_id),))]
 
+    def source_payload(row: Any) -> dict[str, Any]:
+        configuration = json.loads(row["config_json"])
+        return {
+            "id": row["id"],
+            "workspace_id": row["workspace_id"],
+            "name": row["name"],
+            "connector": row["connector_id"],
+            "connector_id": row["connector_id"],
+            "status": row["status"],
+            "test_status": row["status"] if row["last_tested_at"] else "not-tested",
+            "validation": "tested" if row["last_tested_at"] and row["status"] == "ready" else "not-tested",
+            "scope": configuration.get("schemas") or configuration.get("bundle_id"),
+            "capabilities": {
+                "metadata_only": True,
+                "operations": ["test_connection", "discover_assets", "get_definitions"] if row["connector_id"] == "postgresql" else ["import_bundle"],
+            },
+            "configuration": configuration,
+            "secret_ref": row["secret_ref"],
+            "last_tested_at": row["last_tested_at"],
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+        }
+
+    def ensure_resource_group(fingerprint: str) -> UUID:
+        with database.connect() as connection:
+            row = connection.execute("SELECT id FROM resource_groups WHERE resource_fingerprint=?", (fingerprint,)).fetchone()
+        if row:
+            return UUID(row["id"])
+        try:
+            return controller.create_resource_group(fingerprint, SourcePolicy())
+        except AdmissionError as exc:
+            if exc.code != "RESOURCE_GROUP_CONFLICT":
+                raise
+            with database.connect() as connection:
+                row = connection.execute("SELECT id FROM resource_groups WHERE resource_fingerprint=?", (fingerprint,)).fetchone()
+            if not row:
+                raise
+            return UUID(row["id"])
+
+    @app.get("/api/v1/workspaces/{workspace_id}/sources")
+    def list_sources(workspace_id: UUID, _: Annotated[AuthContext, Depends(require("assessment:run"))]) -> list[dict[str, Any]]:
+        with database.connect() as connection:
+            rows = connection.execute("SELECT * FROM sources WHERE workspace_id=? ORDER BY created_at DESC", (str(workspace_id),)).fetchall()
+        return [source_payload(row) for row in rows]
+
+    @app.post("/api/v1/workspaces/{workspace_id}/sources/postgresql", status_code=201)
+    def create_postgresql_source(
+        workspace_id: UUID,
+        body: PostgreSQLSourceRequest,
+        _: Annotated[AuthContext, Depends(require("source:admin"))],
+    ) -> dict[str, Any]:
+        fingerprint = body.resource_fingerprint or f"postgresql://{body.host.lower()}:{body.port}/{body.database.lower()}"
+        configuration = PostgresSourceConfiguration(
+            host=body.host,
+            port=body.port,
+            database=body.database,
+            schemas=body.scope.schemas,
+            sslmode=body.sslmode,
+            statement_timeout_ms=body.statement_timeout_ms,
+            max_objects=body.max_objects,
+            resource_fingerprint=fingerprint,
+        )
+        source_id, connection_id, now = uuid4(), uuid4(), _now().isoformat()
+        group_id = ensure_resource_group(fingerprint)
+        with database.transaction(immediate=True) as connection:
+            connection.execute(
+                "INSERT INTO sources(id,workspace_id,name,connector_id,config_json,secret_ref,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)",
+                (str(source_id), str(workspace_id), body.name, "postgresql", json_value(configuration), body.credential_ref, "configured", now, now),
+            )
+        try:
+            controller.register_connection_alias(
+                workspace_id=workspace_id,
+                connection_id=connection_id,
+                source_id=source_id,
+                resource_group_ids=[group_id],
+                connector_id="postgresql",
+                allowed_operations={"test_connection", "discover_assets", "get_definitions", "execution_status"},
+                authorized_scope=configuration.schemas,
+            )
+        except AdmissionError:
+            with database.transaction(immediate=True) as connection:
+                connection.execute("DELETE FROM sources WHERE id=? AND workspace_id=?", (str(source_id), str(workspace_id)))
+            raise
+        with database.connect() as connection:
+            row = connection.execute("SELECT * FROM sources WHERE id=?", (str(source_id),)).fetchone()
+        return source_payload(row)
+
+    @app.post("/api/v1/workspaces/{workspace_id}/sources/artifact-bundle", status_code=201)
+    def create_artifact_source(
+        workspace_id: UUID,
+        body: ArtifactBundleSourceRequest,
+        _: Annotated[AuthContext, Depends(require("source:admin"))],
+    ) -> dict[str, Any]:
+        configuration = ArtifactBundleConfiguration(**body.model_dump(exclude={"name"}))
+        source_id, connection_id, now = uuid4(), uuid4(), _now().isoformat()
+        fingerprint = f"artifact-bundle://{configuration.bundle_id}"
+        group_id = ensure_resource_group(fingerprint)
+        with database.transaction(immediate=True) as connection:
+            connection.execute(
+                "INSERT INTO sources(id,workspace_id,name,connector_id,config_json,secret_ref,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)",
+                (str(source_id), str(workspace_id), body.name, "artifact-bundle", json_value(configuration), None, "configured", now, now),
+            )
+        controller.register_connection_alias(
+            workspace_id=workspace_id,
+            connection_id=connection_id,
+            source_id=source_id,
+            resource_group_ids=[group_id],
+            connector_id="artifact-bundle",
+            allowed_operations={"import_bundle"},
+            authorized_scope=[configuration.bundle_id],
+        )
+        with database.connect() as connection:
+            row = connection.execute("SELECT * FROM sources WHERE id=?", (str(source_id),)).fetchone()
+        return source_payload(row)
+
     @app.post("/api/v1/workspaces/{workspace_id}/inference-profiles", status_code=201)
     def create_inference_profile(workspace_id: UUID, body: InferenceProfileCreate, _: Annotated[AuthContext, Depends(require("inference:admin"))]) -> InferenceProfile:
         profile = InferenceProfile(workspace_id=workspace_id, **body.model_dump())
@@ -215,6 +398,32 @@ def create_app(
             rows = connection.execute("SELECT body_json FROM inference_profiles WHERE workspace_id=? ORDER BY name", (str(workspace_id),)).fetchall()
         return [InferenceProfile.model_validate_json(row["body_json"]) for row in rows]
 
+    @app.post("/api/v1/workspaces/{workspace_id}/inference-profiles/{profile_id}/test")
+    def test_inference_profile(
+        workspace_id: UUID,
+        profile_id: UUID,
+        _: Annotated[AuthContext, Depends(require("inference:admin"))],
+    ) -> InferenceProfile:
+        with database.connect() as connection:
+            row = connection.execute(
+                "SELECT body_json FROM inference_profiles WHERE id=? AND workspace_id=?",
+                (str(profile_id), str(workspace_id)),
+            ).fetchone()
+        if not row:
+            raise HTTPException(404, "inference profile not found")
+        if is_demo:
+            raise HTTPException(409, "provider tests are unavailable in synthetic demo mode")
+        try:
+            run_async(temporal.execute_profile_test({"workspace_id": str(workspace_id), "profile_id": str(profile_id)}))
+        except Exception as exc:
+            raise HTTPException(503, "inference worker did not complete the provider test") from exc
+        with database.connect() as connection:
+            refreshed = connection.execute(
+                "SELECT body_json FROM inference_profiles WHERE id=? AND workspace_id=?",
+                (str(profile_id), str(workspace_id)),
+            ).fetchone()
+        return InferenceProfile.model_validate_json(refreshed["body_json"])
+
     @app.post("/api/v1/workspaces/{workspace_id}/assessments", status_code=201)
     def create_assessment(workspace_id: UUID, body: AssessmentCreate, _: Annotated[AuthContext, Depends(require("assessment:run"))]) -> Assessment:
         with database.transaction(immediate=True) as connection:
@@ -223,7 +432,35 @@ def create_app(
                 raise HTTPException(404, "project not found")
             if body.inference_profile_id and not connection.execute("SELECT 1 FROM inference_profiles WHERE id=? AND workspace_id=?", (str(body.inference_profile_id), str(workspace_id))).fetchone():
                 raise HTTPException(404, "inference profile not found")
+            source_ids = body.scope.get("source_ids", [])
+            if not isinstance(source_ids, list):
+                raise HTTPException(422, "scope.source_ids must be an array")
+            if source_ids:
+                placeholders = ",".join("?" for _ in source_ids)
+                found = connection.execute(
+                    f"SELECT COUNT(*) FROM sources WHERE workspace_id=? AND id IN ({placeholders})",
+                    (str(workspace_id), *(str(value) for value in source_ids)),
+                ).fetchone()[0]
+                if found != len(set(source_ids)):
+                    raise HTTPException(422, "every source must resolve inside the workspace")
             run = Assessment(workspace_id=workspace_id, **body.model_dump())
+            configuration = {
+                "run_id": str(run.id),
+                "source_ids": [str(value) for value in source_ids],
+                "inference_profile_id": str(body.inference_profile_id) if body.inference_profile_id else None,
+                "objective": body.objective,
+                "scope": body.scope,
+            }
+            content_hash = __import__("hashlib").sha256(json_value(configuration).encode()).hexdigest()
+            revision = int(connection.execute(
+                "SELECT COALESCE(MAX(revision),0)+1 FROM config_versions WHERE workspace_id=? AND configuration_type=?",
+                (str(workspace_id), "assessment"),
+            ).fetchone()[0])
+            run.configuration_revision = revision
+            connection.execute(
+                "INSERT INTO config_versions(id,workspace_id,configuration_type,revision,body_json,content_hash,created_by,created_at) VALUES(?,?,?,?,?,?,?,?)",
+                (str(uuid4()), str(workspace_id), "assessment", revision, json_value(configuration), content_hash, str(_.user_id), run.created_at.isoformat()),
+            )
             connection.execute(
                 "INSERT INTO assessments(id,workspace_id,project_id,state,version,body_json,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)",
                 (str(run.id), str(workspace_id), str(run.project_id), run.state.value, run.version, _dump(run), run.created_at.isoformat(), run.updated_at.isoformat()),
@@ -236,6 +473,54 @@ def create_app(
             rows = connection.execute("SELECT body_json FROM assessments WHERE workspace_id=? ORDER BY created_at DESC", (str(workspace_id),)).fetchall()
         return [Assessment.model_validate_json(row["body_json"]) for row in rows]
 
+    async def publish_outbox_record(record_id: str) -> bool:
+        with database.connect() as connection:
+            row = connection.execute("SELECT * FROM outbox WHERE id=? AND published_at IS NULL", (record_id,)).fetchone()
+        if not row:
+            return True
+        payload = json.loads(row["payload_json"])
+        try:
+            if row["event_type"] == "assessment.start":
+                await temporal.start_assessment(payload)
+            elif row["event_type"].startswith("assessment.signal."):
+                await temporal.signal_assessment(row["aggregate_id"], payload["action"])
+            else:
+                return False
+        except Exception:
+            with database.transaction(immediate=True) as connection:
+                connection.execute("UPDATE outbox SET attempt_count=attempt_count+1 WHERE id=?", (record_id,))
+            return False
+        with database.transaction(immediate=True) as connection:
+            connection.execute("UPDATE outbox SET published_at=?,attempt_count=attempt_count+1 WHERE id=?", (_now().isoformat(), record_id))
+        return True
+
+    async def publish_pending_outbox() -> None:
+        with database.connect() as connection:
+            identifiers = [row["id"] for row in connection.execute(
+                "SELECT id FROM outbox WHERE published_at IS NULL ORDER BY created_at LIMIT 25"
+            )]
+        for identifier in identifiers:
+            await publish_outbox_record(identifier)
+
+    @app.on_event("startup")
+    async def start_outbox_reconciler() -> None:
+        if is_demo:
+            return
+
+        async def reconcile() -> None:
+            while True:
+                await publish_pending_outbox()
+                await __import__("asyncio").sleep(2)
+
+        app.state.outbox_task = __import__("asyncio").create_task(reconcile())
+
+    @app.on_event("shutdown")
+    async def stop_outbox_reconciler() -> None:
+        task = getattr(app.state, "outbox_task", None)
+        if task:
+            task.cancel()
+
+    @app.post("/api/v1/workspaces/{workspace_id}/assessments/{run_id}/transitions")
     @app.post("/api/v1/workspaces/{workspace_id}/assessments/{run_id}/transition")
     def transition_assessment(workspace_id: UUID, run_id: UUID, body: RunTransition, _: Annotated[AuthContext, Depends(require("assessment:run"))]) -> Assessment:
         now = _now()
@@ -255,6 +540,20 @@ def create_app(
             if body.gaps:
                 run.gaps = body.gaps
             connection.execute("UPDATE assessments SET state=?,version=?,body_json=?,updated_at=? WHERE id=?", (target.value, run.version, _dump(run), now.isoformat(), str(run_id)))
+            if body.action in {"start", "pause", "resume", "cancel"}:
+                outbox_id = uuid4()
+                event_type = "assessment.start" if body.action == "start" else f"assessment.signal.{body.action}"
+                payload = assessment_payload(database, workspace_id, run_id) if body.action == "start" else {"action": body.action}
+                # assessment_payload reads on another connection and cannot observe
+                # the uncommitted state. Its immutable configuration is sufficient.
+                connection.execute(
+                    "INSERT INTO outbox(id,workspace_id,aggregate_type,aggregate_id,event_type,payload_json,created_at) VALUES(?,?,?,?,?,?,?)",
+                    (str(outbox_id), str(workspace_id), "assessment", str(run_id), event_type, json_value(payload), now.isoformat()),
+                )
+            else:
+                outbox_id = None
+        if outbox_id and not is_demo:
+            run_async(publish_outbox_record(str(outbox_id)))
         return run
 
     @app.post("/api/v1/workspaces/{workspace_id}/evidence", status_code=201)
@@ -405,6 +704,23 @@ def create_app(
         except AdmissionError as exc:
             translate_admission(exc)
 
+    @app.post("/api/v1/internal/source-operations/admit")
+    def internal_admit_operation(
+        body: EvidenceRequest,
+        response: Response,
+        authorization: Annotated[str | None, Header()] = None,
+    ) -> Any:
+        if not service_authorized(authorization, os.getenv("REWEFT_COLLECTOR_SERVICE_TOKEN")):
+            raise HTTPException(401, "collector service token required")
+        try:
+            decision = controller.submit(body)
+            if decision.state == SourceExecutionState.QUEUED:
+                decision = controller.try_admit_queued(decision.operation_request_id)
+            response.status_code = 202 if decision.state == SourceExecutionState.QUEUED else 200
+            return decision
+        except AdmissionError as exc:
+            translate_admission(exc)
+
     @app.get("/api/v1/workspaces/{workspace_id}/source-control/operations/{operation_id}")
     def operation_status(workspace_id: UUID, operation_id: UUID, _: Annotated[AuthContext, Depends(require("assessment:run"))]) -> dict[str, Any]:
         try:
@@ -418,6 +734,102 @@ def create_app(
             return controller.resource_health(workspace_id, source_id)
         except AdmissionError as exc:
             translate_admission(exc)
+
+    @app.post("/api/v1/workspaces/{workspace_id}/sources/{source_id}/test")
+    def test_source(
+        workspace_id: UUID,
+        source_id: UUID,
+        _: Annotated[AuthContext, Depends(require("source:admin"))],
+    ) -> dict[str, Any]:
+        with database.connect() as connection:
+            row = connection.execute("SELECT * FROM sources WHERE id=? AND workspace_id=?", (str(source_id), str(workspace_id))).fetchone()
+        if not row:
+            raise HTTPException(404, "source not found")
+        if is_demo:
+            raise HTTPException(409, "source tests are unavailable in synthetic demo mode")
+        now = _now()
+        with database.transaction(immediate=True) as connection:
+            project = connection.execute(
+                "SELECT id FROM projects WHERE workspace_id=? ORDER BY created_at LIMIT 1",
+                (str(workspace_id),),
+            ).fetchone()
+            if project:
+                project_id = UUID(project["id"])
+            else:
+                project_id = uuid4()
+                connection.execute(
+                    "INSERT INTO projects(id,workspace_id,name,created_at) VALUES(?,?,?,?)",
+                    (str(project_id), str(workspace_id), "Connection diagnostics", now.isoformat()),
+                )
+            diagnostic = Assessment(
+                workspace_id=workspace_id,
+                project_id=project_id,
+                objective=f"Bounded connection test for {row['name']}",
+                scope={"source_ids": [str(source_id)], "diagnostic": True},
+                state=RunState.COLLECTING,
+            )
+            connection.execute(
+                "INSERT INTO assessments(id,workspace_id,project_id,state,version,body_json,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)",
+                (str(diagnostic.id), str(workspace_id), str(project_id), diagnostic.state.value, diagnostic.version, json_value(diagnostic), diagnostic.created_at.isoformat(), diagnostic.updated_at.isoformat()),
+            )
+        try:
+            run_async(temporal.execute_source_test({
+                "workspace_id": str(workspace_id),
+                "project_id": str(project_id),
+                "run_id": str(diagnostic.id),
+                "source_id": str(source_id),
+            }))
+        except Exception as exc:
+            with database.transaction(immediate=True) as connection:
+                diagnostic.state, diagnostic.updated_at, diagnostic.version = RunState.FAILED, _now(), diagnostic.version + 1
+                diagnostic.gaps = ["Connection test did not complete."]
+                connection.execute(
+                    "UPDATE assessments SET state=?,version=?,body_json=?,updated_at=? WHERE id=?",
+                    (diagnostic.state.value, diagnostic.version, json_value(diagnostic), diagnostic.updated_at.isoformat(), str(diagnostic.id)),
+                )
+            raise HTTPException(503, "collector did not complete the source test") from exc
+        with database.transaction(immediate=True) as connection:
+            diagnostic.state, diagnostic.updated_at, diagnostic.version = RunState.COMPLETED, _now(), diagnostic.version + 1
+            connection.execute(
+                "UPDATE assessments SET state=?,version=?,body_json=?,updated_at=? WHERE id=?",
+                (diagnostic.state.value, diagnostic.version, json_value(diagnostic), diagnostic.updated_at.isoformat(), str(diagnostic.id)),
+            )
+        with database.connect() as connection:
+            refreshed = connection.execute("SELECT * FROM sources WHERE id=? AND workspace_id=?", (str(source_id), str(workspace_id))).fetchone()
+        return source_payload(refreshed)
+
+    @app.get("/api/v1/workspaces/{workspace_id}/runs/{run_id}/state")
+    def get_run_state(
+        workspace_id: UUID,
+        run_id: UUID,
+        _: Annotated[AuthContext, Depends(require("evidence:read"))],
+    ) -> dict[str, Any]:
+        try:
+            return run_state(database, workspace_id, run_id)
+        except LookupError as exc:
+            raise HTTPException(404, str(exc)) from exc
+
+    @app.get("/api/v1/workspaces/{workspace_id}/runs/{run_id}/export")
+    def export_run(
+        workspace_id: UUID,
+        run_id: UUID,
+        _: Annotated[AuthContext, Depends(require("export"))],
+    ) -> Response:
+        try:
+            content = build_export(database, workspace_id, run_id, os.getenv("REWEFT_EVIDENCE_PATH", ".data/evidence"))
+        except LookupError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        manifest = {"bytes": len(content), "contains_secrets": False, "format": "zip", "run_id": str(run_id)}
+        with database.transaction(immediate=True) as connection:
+            connection.execute(
+                "INSERT INTO exports(id,workspace_id,run_id,export_type,state,artifact_ref,manifest_json,created_at) VALUES(?,?,?,?,?,?,?,?)",
+                (str(uuid4()), str(workspace_id), str(run_id), "assessment-bundle", "generated", None, json_value(manifest), _now().isoformat()),
+            )
+        return Response(
+            content=content,
+            media_type="application/zip",
+            headers={"Content-Disposition": f'attachment; filename="reweft-{run_id}.zip"'},
+        )
 
     @app.get("/api/v1/demo/snapshot")
     def demo_snapshot() -> dict[str, Any]:

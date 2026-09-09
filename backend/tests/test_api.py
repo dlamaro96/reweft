@@ -119,3 +119,67 @@ def test_assessment_lifecycle_uses_optimistic_concurrency(app):
     assert started.json()["state"] == "collecting"
     conflict = client.post(f"/api/v1/workspaces/{workspace_id}/assessments/{run['id']}/transition", headers=headers, json={"action": "pause", "expected_version": 1})
     assert conflict.status_code == 409
+
+
+def test_live_contract_persists_sources_and_plural_transition(app):
+    client = TestClient(app)
+    identity = bootstrap(client)
+    workspace_id = identity["workspace_id"]
+    headers = {"Authorization": f"Bearer {identity['api_token']}"}
+    runtime = client.get("/api/v1/runtime").json()
+    assert runtime["bootstrapped"] is True
+    assert runtime["persistence"] == "sqlite-development"
+
+    source = client.post(
+        f"/api/v1/workspaces/{workspace_id}/sources/postgresql",
+        headers=headers,
+        json={
+            "name": "Non-default source",
+            "host": "source.internal",
+            "port": 5437,
+            "database": "atlas_source",
+            "username": "readonly",
+            "credential_ref": "secret://source/atlas",
+            "sslmode": "verify-full",
+            "scope": {"schemas": ["ops_atlas"]},
+        },
+    )
+    assert source.status_code == 201, source.text
+    listed = client.get(f"/api/v1/workspaces/{workspace_id}/sources", headers=headers)
+    assert [item["name"] for item in listed.json()] == ["Non-default source"]
+    assert listed.json()[0]["test_status"] == "not-tested"
+
+    project = client.post(f"/api/v1/workspaces/{workspace_id}/projects", headers=headers, json={"name": "Estate"}).json()
+    run = client.post(
+        f"/api/v1/workspaces/{workspace_id}/assessments",
+        headers=headers,
+        json={"project_id": project["id"], "objective": "Assess Atlas", "scope": {"source_ids": [source.json()["id"]]}},
+    ).json()
+    started = client.post(
+        f"/api/v1/workspaces/{workspace_id}/assessments/{run['id']}/transitions",
+        headers=headers,
+        json={"action": "start", "expected_version": 1},
+    )
+    assert started.status_code == 200
+    now = datetime.now(timezone.utc).isoformat()
+    with app.state.database.transaction(immediate=True) as connection:
+        connection.execute(
+            "INSERT INTO run_tasks(id,workspace_id,run_id,task_key,state,owner_role,attempt,body_json,created_at,updated_at) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?)",
+            (str(uuid4()), workspace_id, run["id"], "collect:fixture", "completed", "system", 1, json.dumps({"message": "Collected"}), now, now),
+        )
+    state = client.get(f"/api/v1/workspaces/{workspace_id}/runs/{run['id']}/state", headers=headers)
+    assert state.status_code == 200
+    assert state.json()["run"]["state"] == "collecting"
+    assert state.json()["tasks"][0]["task_key"] == "collect:fixture"
+    assert state.json()["tasks"][0]["state"] == "completed"
+    assert state.json()["progress"] == 100
+
+
+def test_run_state_and_export_do_not_cross_workspace(app):
+    client = TestClient(app)
+    identity = bootstrap(client)
+    headers = {"Authorization": f"Bearer {identity['api_token']}"}
+    foreign = uuid4()
+    assert client.get(f"/api/v1/workspaces/{foreign}/runs/{uuid4()}/state", headers=headers).status_code == 401
+    assert client.get(f"/api/v1/workspaces/{foreign}/runs/{uuid4()}/export", headers=headers).status_code == 401

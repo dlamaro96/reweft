@@ -1,0 +1,10 @@
+{
+  "fixture": "synthetic",
+  "format": "reweft-atlas-bw/v2",
+  "objects": [
+    {"id": "ATLAS_REVENUE_CUBE", "kind": "provider_definition", "fields": ["FISCAL_PERIOD", "PRODUCT_CODE", "RECOGNIZED_AMOUNT"]},
+    {"id": "ATLAS_RECOGNIZED_QUERY", "kind": "query_definition", "metric": "recognized_revenue", "expression": "SUM(RECOGNIZED_AMOUNT)"},
+    {"id": "ATLAS_ADJUSTED_QUERY", "kind": "query_definition", "metric": "adjusted_revenue", "expression": "SUM(RECOGNIZED_AMOUNT) + COALESCE(PERIOD_ADJUSTMENT, 0)"},
+    {"id": "ATLAS_DYNAMIC_SETTLEMENT", "kind": "routine_reference", "resolution": "resolved", "expression": "COALESCE(PERIOD_ADJUSTMENT, 0)", "owner": "finance-data-products"}
+  ]
+}

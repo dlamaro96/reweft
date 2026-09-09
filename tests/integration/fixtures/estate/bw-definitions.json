@@ -1,0 +1,10 @@
+{
+  "fixture": "synthetic",
+  "format": "reweft-atlas-bw/v1",
+  "objects": [
+    {"id": "ATLAS_REVENUE_CUBE", "kind": "provider_definition", "fields": ["FISCAL_PERIOD", "PRODUCT_CODE", "RECOGNIZED_AMOUNT"]},
+    {"id": "ATLAS_RECOGNIZED_QUERY", "kind": "query_definition", "metric": "recognized_revenue", "expression": "SUM(RECOGNIZED_AMOUNT)"},
+    {"id": "ATLAS_ADJUSTED_QUERY", "kind": "query_definition", "metric": "adjusted_revenue", "expression": "SUM(RECOGNIZED_AMOUNT) + PERIOD_ADJUSTMENT"},
+    {"id": "ATLAS_DYNAMIC_SETTLEMENT", "kind": "routine_reference", "resolution": "unresolved", "reason": "Runtime-selected rule is absent from the bounded export."}
+  ]
+}

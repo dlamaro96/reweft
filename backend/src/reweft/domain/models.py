@@ -150,8 +150,8 @@ class InferenceProfileCreate(StrictModel):
             raise ValueError("local endpoints currently require openai_compatible provider")
         if self.provider == ProviderType.BEDROCK and not self.region:
             raise ValueError("Bedrock profiles require region")
-        if self.provider == ProviderType.AZURE_OPENAI and not (self.base_url and self.api_version):
-            raise ValueError("Azure OpenAI profiles require base_url and api_version")
+        if self.provider == ProviderType.AZURE_OPENAI and not self.base_url:
+            raise ValueError("Azure OpenAI profiles require the resource /openai/v1 base_url")
         if self.endpoint_class != EndpointClass.LOCAL and not self.credential_ref and self.provider != ProviderType.BEDROCK:
             raise ValueError("non-local profiles require a credential reference")
         return self

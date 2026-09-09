@@ -11,6 +11,9 @@ from typing import Any
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
+
 from reweft.domain.models import (
     ActualUsage,
     AdmissionDecision,
@@ -67,11 +70,29 @@ class WorkloadController:
     transaction. An unknown external outcome deliberately remains slot-charged.
     """
 
-    def __init__(self, database: Database, signing_key: bytes):
-        if len(signing_key) < 32:
-            raise ValueError("permit signing key must be at least 32 bytes")
+    def __init__(self, database: Database, signing_key: bytes | None = None, *, verification_key: bytes | None = None):
+        if signing_key is None and verification_key is None:
+            raise ValueError("a permit signing or verification key is required")
         self.database = database
-        self.signing_key = signing_key
+        self._legacy_hmac_key: bytes | None = None
+        self._private_key: Ed25519PrivateKey | None = None
+        self._public_key: Ed25519PublicKey | None = None
+        if signing_key and signing_key.startswith(b"-----BEGIN"):
+            loaded = serialization.load_pem_private_key(signing_key, password=None)
+            if not isinstance(loaded, Ed25519PrivateKey):
+                raise ValueError("permit signing key must be Ed25519")
+            self._private_key, self._public_key = loaded, loaded.public_key()
+        elif verification_key:
+            loaded = serialization.load_pem_public_key(verification_key)
+            if not isinstance(loaded, Ed25519PublicKey):
+                raise ValueError("permit verification key must be Ed25519")
+            self._public_key = loaded
+        elif signing_key:
+            # Compatibility for existing SQLite tests and previously generated demo
+            # configuration. Real mode requires the asymmetric key-file path.
+            if len(signing_key) < 32:
+                raise ValueError("permit signing key must be at least 32 bytes")
+            self._legacy_hmac_key = signing_key
 
     def create_resource_group(
         self,
@@ -233,11 +254,16 @@ class WorkloadController:
                 raise AdmissionError("PROFILING_DISABLED", "profiling is disabled by shared resource policy", 403)
             if request.estimated_limits.response_bytes > policy.max_response_bytes or request.estimated_limits.pages > policy.max_pages_per_operation or request.estimated_limits.duration_seconds > policy.request_deadline_seconds:
                 raise AdmissionError("ESTIMATE_EXCEEDS_POLICY", "estimated operation limits exceed resource policy", 422)
-            usage = connection.execute(
-                "SELECT COUNT(*) AS operations,COALESCE(SUM(CAST(json_extract(result_json,'$.actual_usage.response_bytes') AS INTEGER)),0) AS bytes FROM source_operations WHERE run_id=? AND cost_class=?",
+            usage_rows = connection.execute(
+                "SELECT result_json FROM source_operations WHERE run_id=? AND cost_class=?",
                 (row["run_id"], row["cost_class"]),
-            ).fetchone()
-            if usage["operations"] >= policy.max_operations_per_run or usage["bytes"] + request.estimated_limits.response_bytes > policy.max_collection_bytes_per_run:
+            ).fetchall()
+            used_bytes = sum(
+                int((json.loads(item["result_json"]).get("actual_usage") or {}).get("response_bytes", 0))
+                for item in usage_rows
+                if item["result_json"]
+            )
+            if len(usage_rows) >= policy.max_operations_per_run or used_bytes + request.estimated_limits.response_bytes > policy.max_collection_bytes_per_run:
                 return AdmissionDecision(operation_request_id=UUID(operation_id), state=SourceExecutionState.QUEUED, reason="run-collection-budget-exhausted")
         generation = max(int(group["fencing_generation"]) for group in group_rows) + 1
         permit_id = uuid4()
@@ -395,14 +421,25 @@ class WorkloadController:
 
     def _sign(self, payload: dict[str, Any]) -> str:
         encoded = base64.urlsafe_b64encode(_json(payload).encode()).rstrip(b"=").decode()
-        signature = hmac.new(self.signing_key, encoded.encode(), hashlib.sha256).hexdigest()
-        return f"{encoded}.{signature}"
+        if self._private_key:
+            signature = base64.urlsafe_b64encode(self._private_key.sign(encoded.encode())).rstrip(b"=").decode()
+            return f"ed25519.{encoded}.{signature}"
+        if self._legacy_hmac_key:
+            signature = hmac.new(self._legacy_hmac_key, encoded.encode(), hashlib.sha256).hexdigest()
+            return f"hmac-sha256.{encoded}.{signature}"
+        raise AdmissionError("PERMIT_AUTHORITY_UNAVAILABLE", "this process cannot issue source permits", 503)
 
     def _verify_signature(self, token: str) -> dict[str, Any]:
         try:
-            encoded, supplied = token.split(".", 1)
-            expected = hmac.new(self.signing_key, encoded.encode(), hashlib.sha256).hexdigest()
-            if not hmac.compare_digest(supplied, expected):
+            algorithm, encoded, supplied = token.split(".", 2)
+            if algorithm == "ed25519" and self._public_key:
+                signature = base64.urlsafe_b64decode(supplied + "=" * (-len(supplied) % 4))
+                self._public_key.verify(signature, encoded.encode())
+            elif algorithm == "hmac-sha256" and self._legacy_hmac_key:
+                expected = hmac.new(self._legacy_hmac_key, encoded.encode(), hashlib.sha256).hexdigest()
+                if not hmac.compare_digest(supplied, expected):
+                    raise ValueError
+            else:
                 raise ValueError
             padded = encoded + "=" * (-len(encoded) % 4)
             payload = json.loads(base64.urlsafe_b64decode(padded))
@@ -445,3 +482,16 @@ class WorkloadController:
 def generate_signing_key() -> bytes:
     return secrets.token_bytes(32)
 
+
+def generate_permit_keypair() -> tuple[bytes, bytes]:
+    private = Ed25519PrivateKey.generate()
+    private_pem = private.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+    public_pem = private.public_key().public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo,
+    )
+    return private_pem, public_pem

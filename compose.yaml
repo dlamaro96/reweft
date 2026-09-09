@@ -116,13 +116,271 @@ services:
     security_opt: [no-new-privileges:true]
     restart: unless-stopped
 
+  real-gateway:
+    profiles: [real-runtime]
+    build:
+      context: .
+      dockerfile: deploy/docker/frontend.Dockerfile
+      args:
+        NGINX_CONFIG: deploy/docker/nginx-real-runtime.conf
+    depends_on:
+      real-api: {condition: service_healthy}
+    ports:
+      - "127.0.0.1:${REWEFT_REAL_HTTP_PORT:-8180}:8080"
+    networks: [edge, real-application]
+    read_only: true
+    tmpfs: [/var/cache/nginx, /var/run]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:8080/"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  real-api:
+    profiles: [real-runtime]
+    build:
+      context: .
+      dockerfile: deploy/docker/backend.Dockerfile
+    user: root
+    entrypoint: ["/usr/local/bin/prepare-real-api"]
+    command: ["uvicorn", "reweft.api.app:app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log"]
+    environment:
+      REWEFT_MODE: assessment
+      DATABASE_URL: postgresql://${REWEFT_APP_DB_USER:-reweft_app}:${REWEFT_APP_DB_PASSWORD:?real runtime requires REWEFT_APP_DB_PASSWORD}@real-postgres:5432/${REWEFT_APP_DB_NAME:-reweft}
+      TEMPORAL_ADDRESS: real-temporal:7233
+      REWEFT_SECRET_KEY: ${REWEFT_SECRET_KEY:?real runtime requires REWEFT_SECRET_KEY}
+      REWEFT_BOOTSTRAP_TOKEN: ${REWEFT_BOOTSTRAP_TOKEN:?real runtime requires REWEFT_BOOTSTRAP_TOKEN}
+      REWEFT_COLLECTOR_SERVICE_TOKEN: ${REWEFT_COLLECTOR_SERVICE_TOKEN:?real runtime requires REWEFT_COLLECTOR_SERVICE_TOKEN}
+      REWEFT_ANALYSIS_SERVICE_TOKEN: ${REWEFT_ANALYSIS_SERVICE_TOKEN:?real runtime requires REWEFT_ANALYSIS_SERVICE_TOKEN}
+      REWEFT_PERMIT_SIGNING_KEY_FILE: /run/reweft-keys/permit-signing.pem
+      REWEFT_EVIDENCE_PATH: /var/lib/reweft/evidence
+    volumes:
+      - real_evidence:/var/lib/reweft/evidence
+      - ./.secrets/real-runtime/permit-signing.pem:/run/reweft-key-input/permit-signing.pem:ro
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /run/reweft-keys:mode=0750,uid=100,gid=101
+    depends_on:
+      real-postgres: {condition: service_healthy}
+      real-temporal: {condition: service_healthy}
+    networks: [real-application]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import json,urllib.request; d=json.load(urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health',timeout=2)); assert d.get('status')=='ok' and d.get('persistence')=='postgresql'"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 15s
+    restart: unless-stopped
+
+  real-analysis-worker:
+    profiles: [real-runtime]
+    build:
+      context: .
+      dockerfile: deploy/docker/backend.Dockerfile
+    command: ["python", "-m", "reweft.orchestration.worker"]
+    environment:
+      DATABASE_URL: postgresql://${REWEFT_APP_DB_USER:-reweft_app}:${REWEFT_APP_DB_PASSWORD:?real runtime requires REWEFT_APP_DB_PASSWORD}@real-postgres:5432/${REWEFT_APP_DB_NAME:-reweft}
+      TEMPORAL_ADDRESS: real-temporal:7233
+      REWEFT_TEMPORAL_TASK_QUEUE: analysis
+      REWEFT_EVIDENCE_PATH: /var/lib/reweft/evidence
+      REWEFT_ANALYSIS_SERVICE_TOKEN: ${REWEFT_ANALYSIS_SERVICE_TOKEN:?real runtime requires REWEFT_ANALYSIS_SERVICE_TOKEN}
+    volumes: [real_evidence:/var/lib/reweft/evidence]
+    depends_on:
+      real-postgres: {condition: service_healthy}
+      real-temporal: {condition: service_healthy}
+    networks: [real-application]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: ["CMD", "python", "-m", "reweft.orchestration.worker", "--health-check"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+    restart: unless-stopped
+
+  real-inference-worker:
+    profiles: [real-runtime]
+    build:
+      context: .
+      dockerfile: deploy/docker/backend.Dockerfile
+    command: ["python", "-m", "reweft.inference.worker"]
+    environment:
+      DATABASE_URL: postgresql://${REWEFT_APP_DB_USER:-reweft_app}:${REWEFT_APP_DB_PASSWORD:?real runtime requires REWEFT_APP_DB_PASSWORD}@real-postgres:5432/${REWEFT_APP_DB_NAME:-reweft}
+      TEMPORAL_ADDRESS: real-temporal:7233
+      REWEFT_TEMPORAL_TASK_QUEUE: inference
+      REWEFT_INFERENCE_PROVIDER: openai_compatible
+      REWEFT_INFERENCE_BASE_URL: http://deterministic-test-provider:8090/v1
+      REWEFT_INFERENCE_MODEL: reweft-deterministic-test-v1
+      REWEFT_INFERENCE_TEST_PROVIDER: "true"
+      REWEFT_INFERENCE_PROFILE_SEED: /opt/reweft/bootstrap/deterministic-provider.yaml
+    volumes:
+      - ./deploy/test-provider/profile-seed.yaml:/opt/reweft/bootstrap/deterministic-provider.yaml:ro
+    depends_on:
+      real-postgres: {condition: service_healthy}
+      real-temporal: {condition: service_healthy}
+      deterministic-test-provider: {condition: service_healthy}
+    networks: [real-application, provider-egress]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: ["CMD", "python", "-m", "reweft.inference.worker", "--health-check"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+    restart: unless-stopped
+
+  real-collector:
+    profiles: [real-runtime]
+    build:
+      context: .
+      dockerfile: deploy/docker/backend.Dockerfile
+    command: ["python", "-m", "reweft.connectors.worker"]
+    environment:
+      DATABASE_URL: postgresql://${REWEFT_APP_DB_USER:-reweft_app}:${REWEFT_APP_DB_PASSWORD:?real runtime requires REWEFT_APP_DB_PASSWORD}@real-postgres:5432/${REWEFT_APP_DB_NAME:-reweft}
+      TEMPORAL_ADDRESS: real-temporal:7233
+      REWEFT_TEMPORAL_TASK_QUEUE: collector
+      REWEFT_EVIDENCE_PATH: /var/lib/reweft/evidence
+      REWEFT_COLLECTOR_SERVICE_TOKEN: ${REWEFT_COLLECTOR_SERVICE_TOKEN:?real runtime requires REWEFT_COLLECTOR_SERVICE_TOKEN}
+      REWEFT_PERMIT_VERIFICATION_KEY_FILE: /run/reweft-keys/permit-verification.pem
+      REWEFT_SOURCE_DSN: postgresql://${REWEFT_SOURCE_READER_USER:-reweft_reader}:${REWEFT_SOURCE_READER_PASSWORD:?real runtime requires REWEFT_SOURCE_READER_PASSWORD}@synthetic-source-postgres:5432/${REWEFT_SOURCE_DB_NAME:-loom_source}
+      REWEFT_SOURCE_SCHEMA: ${REWEFT_SOURCE_SCHEMA:-ops_atlas}
+      REWEFT_SOURCE_NAME: Atlas Foundry
+      REWEFT_SOURCE_ENVIRONMENT: synthetic_fixture
+      REWEFT_ARTIFACT_ROOT: /opt/reweft/artifacts
+    volumes:
+      - real_evidence:/var/lib/reweft/evidence
+      - ./.secrets/real-runtime/permit-verification.pem:/run/reweft-keys/permit-verification.pem:ro
+      - ./tests/integration/fixtures:/opt/reweft/artifacts:ro
+    depends_on:
+      real-postgres: {condition: service_healthy}
+      real-temporal: {condition: service_healthy}
+      synthetic-source-postgres: {condition: service_healthy}
+    networks: [real-application, source-egress]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: ["CMD", "python", "-m", "reweft.connectors.worker", "--health-check"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+    restart: unless-stopped
+
+  real-postgres:
+    profiles: [real-runtime]
+    image: postgres:16.6-alpine
+    environment:
+      POSTGRES_USER: ${REWEFT_DB_ADMIN_USER:-reweft_admin}
+      POSTGRES_PASSWORD: ${REWEFT_DB_ADMIN_PASSWORD:?real runtime requires REWEFT_DB_ADMIN_PASSWORD}
+      POSTGRES_DB: postgres
+      REWEFT_APP_DB_USER: ${REWEFT_APP_DB_USER:-reweft_app}
+      REWEFT_APP_DB_PASSWORD: ${REWEFT_APP_DB_PASSWORD:?real runtime requires REWEFT_APP_DB_PASSWORD}
+      REWEFT_APP_DB_NAME: ${REWEFT_APP_DB_NAME:-reweft}
+      TEMPORAL_DB_USER: ${TEMPORAL_DB_USER:-temporal}
+      TEMPORAL_DB_PASSWORD: ${TEMPORAL_DB_PASSWORD:?real runtime requires TEMPORAL_DB_PASSWORD}
+      TEMPORAL_DB_NAME: ${TEMPORAL_DB_NAME:-temporal}
+      TEMPORAL_VISIBILITY_DB_NAME: ${TEMPORAL_VISIBILITY_DB_NAME:-temporal_visibility}
+    volumes:
+      - real_postgres_data:/var/lib/postgresql/data
+      - ./deploy/docker/init-real-databases.sh:/docker-entrypoint-initdb.d/10-init-real-databases.sh:ro
+      - ./deploy/docker/health-real-postgres.sh:/usr/local/bin/reweft-health:ro
+    networks: [real-application]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/reweft-health"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  real-temporal:
+    profiles: [real-runtime]
+    image: temporalio/auto-setup:1.27.2
+    environment:
+      DB: postgres12
+      SKIP_DB_CREATE: "true"
+      DB_PORT: 5432
+      POSTGRES_SEEDS: real-postgres
+      POSTGRES_USER: ${TEMPORAL_DB_USER:-temporal}
+      POSTGRES_PWD: ${TEMPORAL_DB_PASSWORD:?real runtime requires TEMPORAL_DB_PASSWORD}
+      DBNAME: ${TEMPORAL_DB_NAME:-temporal}
+      VISIBILITY_DBNAME: ${TEMPORAL_VISIBILITY_DB_NAME:-temporal_visibility}
+      TEMPORAL_ADDRESS: real-temporal:7233
+    depends_on:
+      real-postgres: {condition: service_healthy}
+    networks: [real-application]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: ["CMD-SHELL", "tctl --address \"$${TEMPORAL_ADDRESS}\" cluster health"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+      start_period: 15s
+    restart: unless-stopped
+
+  synthetic-source-postgres:
+    profiles: [real-runtime]
+    image: postgres:16.6-alpine
+    environment:
+      POSTGRES_USER: ${REWEFT_SOURCE_ADMIN_USER:-source_admin}
+      POSTGRES_PASSWORD: ${REWEFT_SOURCE_ADMIN_PASSWORD:?real runtime requires REWEFT_SOURCE_ADMIN_PASSWORD}
+      POSTGRES_DB: ${REWEFT_SOURCE_DB_NAME:-loom_source}
+      REWEFT_SOURCE_READER_USER: ${REWEFT_SOURCE_READER_USER:-reweft_reader}
+      REWEFT_SOURCE_READER_PASSWORD: ${REWEFT_SOURCE_READER_PASSWORD:?real runtime requires REWEFT_SOURCE_READER_PASSWORD}
+      REWEFT_SOURCE_SCHEMA: ${REWEFT_SOURCE_SCHEMA:-ops_atlas}
+    volumes:
+      - synthetic_source_data:/var/lib/postgresql/data
+      - ./deploy/docker/init-synthetic-source.sh:/docker-entrypoint-initdb.d/20-init-synthetic-source.sh:ro
+      - ./deploy/docker/health-synthetic-source.sh:/usr/local/bin/reweft-health:ro
+    networks: [source-egress]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/reweft-health"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  deterministic-test-provider:
+    profiles: [real-runtime]
+    build:
+      context: .
+      dockerfile: deploy/test-provider/Dockerfile
+    environment:
+      REWEFT_TEST_PROVIDER_MODEL: reweft-deterministic-test-v1
+    networks: [provider-egress]
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import json,urllib.request; d=json.load(urllib.request.urlopen('http://127.0.0.1:8090/healthz',timeout=2)); assert d=={'status':'ok','synthetic':True}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
 networks:
   edge: {}
   application:
     internal: true
   collectors:
     internal: true
+  real-application:
+    internal: true
+  source-egress:
+    internal: true
+  provider-egress:
+    internal: true
 
 volumes:
   postgres_data: {}
   evidence: {}
+  real_postgres_data:
+    name: reweft_real_postgres_data
+  real_evidence:
+    name: reweft_real_evidence
+  synthetic_source_data:
+    name: reweft_synthetic_source_data

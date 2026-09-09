@@ -1,0 +1,9 @@
+{
+  "fixture": "synthetic",
+  "format": "reweft-atlas-report/v1",
+  "reports": [
+    {"id": "recognized-revenue-view", "title": "Revenue position", "metric": "recognized_revenue", "formula": "SUM(invoice.recognized_revenue)"},
+    {"id": "adjusted-revenue-view", "title": "Revenue position", "metric": "adjusted_revenue", "formula": "SUM(invoice.recognized_revenue) + SUM(period.adjustment_amount)"},
+    {"id": "year-end-dispatch", "title": "Year-end dispatch file", "usage": "annual", "consumer_status": "external-boundary-unresolved"}
+  ]
+}
