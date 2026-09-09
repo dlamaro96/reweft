@@ -1,5 +1,5 @@
 schema_version: reweft.acceptance/v1
-updated_at: "2026-09-09T14:14:00Z"
+updated_at: "2026-09-09T15:19:25Z"
 status_definitions:
   passed: Executed successfully with durable evidence.
   failed: Executed and did not meet the requirement.
@@ -38,22 +38,22 @@ checks:
     requirement: No-key demo works, is labeled synthetic, and never masquerades as live SAP or inference.
     implementation_paths: [examples/synthetic-estate, examples/configurations/demo.yaml]
     tests: [frontend/e2e, tests/integration]
-    execution: {status: not_run, reason: Demo workflow has not run.}
-    evidence_artifact: null
+    execution: {status: passed, reason: "The no-key bootstrap ran twice without changing .env or the evidence volume identity, and browser/API inspection kept the experience explicitly labeled synthetic.", command: "./scripts/bootstrap.sh --demo (twice), then in-app browser inspection", executed_at: "2026-09-09T15:19:25Z", environment: "local ARM64 Docker/Colima and in-app browser"}
+    evidence_artifact: tests/integration/evidence/20260909-real-runtime-summary.json
     release_blocking: true
   - id: MODEL-01
     requirement: Provider/model changes require no rebuild and native/OpenAI-compatible paths pass contracts.
     implementation_paths: [backend/src/reweft/inference, contracts/schemas/config.schema.json]
     tests: [backend/tests, tests/contracts]
-    execution: {status: not_run, reason: Provider contract tests have not run.}
-    evidence_artifact: null
+    execution: {status: passed, reason: "OpenAI-compatible and hosted-provider transport contracts passed, and an alternate persisted model profile completed a run without rebuilding images or widening its endpoint allowlist.", command: "make test && python3 tests/integration/run_assessment.py --env-file .data/real-runtime.env --output tests/integration/evidence/final-adversarial-matrix.json", executed_at: "2026-09-09T15:19:25Z", environment: "unit contract transports plus labeled local deterministic provider"}
+    evidence_artifact: tests/integration/evidence/20260909-real-runtime-summary.json
     release_blocking: true
   - id: MODEL-02
     requirement: Unsupported capabilities, outages, and invalid outputs have bounded honest outcomes.
     implementation_paths: [backend/src/reweft/inference]
     tests: [backend/tests]
-    execution: {status: not_run, reason: Failure-mode tests have not run.}
-    evidence_artifact: null
+    execution: {status: passed, reason: "Provider outage, retryable/non-retryable HTTP failures, malformed JSON, incomplete output, and strict-schema violations all produced bounded explicit failures or completed-with-gaps outcomes.", command: "make test && python3 tests/integration/run_assessment.py --env-file .data/real-runtime.env --output tests/integration/evidence/final-adversarial-matrix.json", executed_at: "2026-09-09T15:19:25Z", environment: "unit contract transports plus real local Temporal runtime"}
+    evidence_artifact: tests/integration/evidence/20260909-real-runtime-summary.json
     release_blocking: true
   - id: MODEL-03
     requirement: Fallback respects egress and shared token/cost limits include delegated work.
@@ -87,15 +87,15 @@ checks:
     requirement: Shared aliases, agents, and workers cannot exceed a resource-group admission limit.
     implementation_paths: [backend/src/reweft/source_control]
     tests: [backend/tests, tests/integration]
-    execution: {status: not_run, reason: Multi-worker admission test has not run.}
-    evidence_artifact: null
+    execution: {status: passed, reason: "Two aliases sharing one physical resource group were constrained by the persisted capacity authority; the second request remained queued while the first occupied the only slot.", command: "make test", executed_at: "2026-09-09T14:59:13Z", environment: "local backend test suite"}
+    evidence_artifact: tests/integration/evidence/20260909-real-runtime-summary.json
     release_blocking: true
   - id: SOURCE-03
     requirement: Timeout or lease expiry cannot unsafely release uncertain source capacity.
     implementation_paths: [backend/src/reweft/source_control]
     tests: [backend/tests, tests/resilience]
-    execution: {status: not_run, reason: Uncertain-execution test has not run.}
-    evidence_artifact: null
+    execution: {status: passed, reason: "Lease expiry moved the operation to outcome-unknown while retaining its capacity charge; only explicit reconciliation released the shared slot.", command: "make test", executed_at: "2026-09-09T14:59:13Z", environment: "local backend test suite"}
+    evidence_artifact: tests/integration/evidence/20260909-real-runtime-summary.json
     release_blocking: true
   - id: SOURCE-04
     requirement: Degradation and missing telemetry are conservative and admission-authority loss stops new work.
@@ -157,8 +157,8 @@ checks:
     requirement: Partial scans and permission changes cannot create false deletions or completeness.
     implementation_paths: [backend/src/reweft/evidence]
     tests: [backend/tests]
-    execution: {status: not_run, reason: Snapshot completeness tests have not run.}
-    evidence_artifact: null
+    execution: {status: passed, reason: "A deliberately truncated PostgreSQL inventory remained partial and generated neither deletion nor unused-asset findings.", command: "python3 tests/integration/run_assessment.py --env-file .data/real-runtime.env --output tests/integration/evidence/final-adversarial-matrix.json", executed_at: "2026-09-09T15:19:25Z", environment: "real local PostgreSQL/Temporal runtime with bounded synthetic source"}
+    evidence_artifact: tests/integration/evidence/20260909-real-runtime-summary.json
     release_blocking: true
   - id: AGENT-01
     requirement: Representative investigation replans from evidence with bounded follow-up work.
@@ -206,8 +206,8 @@ checks:
     requirement: Local target executes on fixtures while other targets expose precise gaps.
     implementation_paths: [backend/src/reweft/target_adapters, contracts/target-capabilities]
     tests: [tests/integration]
-    execution: {status: not_run, reason: Local target execution has not run.}
-    evidence_artifact: null
+    execution: {status: passed, reason: "Generated DuckDB SQL executed in the isolated fixture sandbox and matched independently prepared expected values; cloud target capability records remain explicitly planned and unverified.", command: "make test && REWEFT_REAL_ENV_FILE=.data/real-runtime.env tests/integration/run-real-runtime.sh", executed_at: "2026-09-09T15:02:45Z", environment: "local DuckDB fixture sandbox"}
+    evidence_artifact: tests/integration/evidence/20260909-real-runtime-summary.json
     release_blocking: true
   - id: VERIFY-01
     requirement: Semantic tests catch conflicting revenue and non-additive inventory behavior.

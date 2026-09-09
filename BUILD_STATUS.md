@@ -51,15 +51,21 @@ The local default demo was left running at `http://127.0.0.1:8080` for inspectio
 
 | Check | Result | Boundary |
 |---|---|---|
-| `make test` | Passed: 27 backend, 11 frontend; 1 opt-in live-PostgreSQL pytest skipped | Unit/API/workflow/connector/security-boundary tests plus contract validation; not a production suite. |
+| `make test` | Passed: 44 backend, 11 frontend; 1 opt-in live-PostgreSQL pytest skipped | Unit/API/workflow/connector/security-boundary tests plus contract validation; not a production suite. |
 | `make lint` and `make compose-check` | Passed | Production frontend build and Compose resolution. |
 | `tests/integration/run-real-runtime.sh` | Passed | Real local PostgreSQL/Temporal processes with a synthetic Atlas source/artifact estate and a clearly labeled deterministic provider. |
 | Unresolved assessment | Passed | Persisted three evidence artifacts and three evidence-driven findings; completed-with-gaps with explicit settlement/outbound gaps. |
 | Analysis-worker restart during a second run | Passed | Temporal resumed to 100% persisted task progress with no duplicate task, source-operation, or finding keys. |
+| Collector outage plus pause/resume/cancel | Passed | Work remained durably queued while collection was unavailable; resumed work completed and cancellation left no active unsafe operation. |
+| API and PostgreSQL/controller loss | Passed | API restart preserved the active run. During database loss a new transition failed closed; after recovery its original queued version remained with zero source operations. |
+| Provider and adversarial failures | Passed | Provider loss degraded to explicit gaps within bounded attempts; malformed/incomplete outputs, prompt injection, endpoint denials, strict schemas, partial scans, and cross-workspace access were exercised. |
 | Changed resolved artifact bundle | Passed | A subsequent run completed without gaps, removed the retirement blocker, and propagated the changed `COALESCE` formula into the generated specification. |
 | DuckDB target and authorized export | Passed | Independent expected values matched; ZIP included generated target SQL/manifest and no generated token/password/private-key canaries. |
 | Backup then confirmed restore | Passed | Checksums verified; workspace identity, configuration, evidence, and sampled run outcomes survived restoration. |
+| Runtime secret scan | Passed | Generated credentials were absent from every Compose service log, the full evidence volume, and the authorized export. |
+| Demo bootstrap twice | Passed | A regression involving inactive-profile interpolation was fixed; both runs preserved the `.env` hash and named evidence-volume identity. |
+| Browser inspection | Passed within stated boundary | Desktop navigation/filtering, live connection gate, explicit demo opt-in, 390×844 layout, accessible labels/skip link, and console logs were inspected. Authenticated live browser entry and a full automated accessibility suite remain open. |
 
 The sanitized committed summary is [tests/integration/evidence/20260909-real-runtime-summary.json](tests/integration/evidence/20260909-real-runtime-summary.json). The runtime was left healthy at `http://127.0.0.1:8180`; its volumes, generated configuration, identities, evidence, and backup were preserved.
 
-Remaining release blockers include password/session lifecycle and OIDC, collaboration, native SAP BW and reporting connectors, real model inference, broader provider failure/budget coverage, active reconciliation of every cancellation/unknown source execution, incremental dependency-aware invalidation, cloud targets, full browser accessibility/E2E, multi-node/HA, upgrade testing, SBOM/signing, and publication. The existing deprecation warnings for FastAPI event hooks and Starlette's current test client are also still visible.
+Remaining release blockers include password/session lifecycle and OIDC, collaboration, native SAP BW and reporting connectors, real model inference, shared inference budgets and policy-compatible fallback, active source-native reconciliation for every cancellation/unknown operation, incremental dependency-aware invalidation, cloud targets, authenticated browser onboarding and full automated accessibility, multi-node/HA, upgrade testing, SBOM/signing, and publication. The existing deprecation warnings for FastAPI event hooks and Starlette's current test client are also still visible.

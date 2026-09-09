@@ -1,34 +1,47 @@
 {
   "schema_version": "reweft.integration-evidence/v1",
-  "executed_at": "2026-09-09T14:14:00Z",
-  "implementation_commit": "32f1250bb57d4869f7c9b983fa84e4c40b056c42",
+  "executed_at": "2026-09-09T15:19:25Z",
+  "implementation_commit": "5316896",
   "tested_tree_base": "62c78bd11bbbbfab31e759e5e0c4dc73f91f86ec",
-  "environment": "local ARM64 Docker/Colima; PostgreSQL 16.6; Temporal 1.27.2; labeled deterministic OpenAI-compatible provider",
+  "environment": "local ARM64 Docker/Colima; PostgreSQL 16.6; Temporal 1.27.2; labeled deterministic OpenAI-compatible provider; in-app browser",
   "commands": [
     "make test",
     "make lint",
     "make compose-check",
+    "./scripts/release-check.sh",
     "REWEFT_REAL_ENV_FILE=.data/real-runtime.env tests/integration/run-real-runtime.sh",
-    "REWEFT_REAL_ENV_FILE=.data/real-runtime.env ./scripts/backup-real-runtime.sh",
-    "REWEFT_REAL_ENV_FILE=.data/real-runtime.env ./scripts/restore-real-runtime.sh <generated-backup> --confirm-overwrite"
+    "python3 tests/integration/run_assessment.py --env-file .data/real-runtime.env --output tests/integration/evidence/final-adversarial-matrix.json",
+    "REWEFT_REAL_ENV_FILE=.data/real-runtime.env ./scripts/backup-real-runtime.sh .data/e2e-backups",
+    "REWEFT_REAL_ENV_FILE=.data/real-runtime.env ./scripts/restore-real-runtime.sh <generated-backup> --confirm-overwrite",
+    "./scripts/bootstrap.sh --demo (executed twice)"
   ],
   "results": {
-    "backend": "27 passed, 1 live-PostgreSQL pytest skipped because it requires an explicit test database URL",
+    "backend": "44 passed, 1 opt-in live-PostgreSQL pytest skipped because it requires an explicit test database URL",
     "frontend": "11 passed; production TypeScript/Vite build passed",
     "runtime_topology_and_boundaries": "passed",
-    "authenticated_configuration_and_tests": "passed",
+    "authenticated_configuration_and_tests": "passed through API harness; authenticated browser entry remains blocked on action-time confirmation for entering the generated local test token",
     "unresolved_assessment": "completed-with-gaps; semantic conflict, non-additive inventory, and retirement blocker retained",
     "analysis_worker_restart": "recovered to completed-with-gaps with 100% persisted task progress and no duplicate task, operation, or finding keys",
+    "collector_outage_and_lifecycle": "queued safely while the collector was stopped; pause/resume completed; cancellation remained cancelled without an active unsafe source operation",
+    "api_restart": "run completed with persisted state after API restart",
+    "database_controller_loss": "transition failed closed within the client deadline; after database and worker recovery the run retained its original queued state/version with zero source operations",
+    "provider_failures": "outage produced completed-with-gaps and bounded failed invocation records; malformed JSON, incomplete responses, HTTP retry classes, strict nested schema failures, and endpoint-policy denials passed unit contracts",
+    "runtime_model_change": "alternate model/profile completed without an image rebuild or egress broadening",
+    "prompt_injection": "instruction-shaped report content remained inert evidence; tool_choice stayed none and source operation scope did not change",
+    "partial_collection": "partial evidence remained explicit and did not produce deletion or unused findings",
+    "workspace_isolation": "random cross-workspace project access was denied; API unit coverage also denied foreign evidence, lineage, run state, and export access",
     "changed_artifact_assessment": "completed; retirement blocker removed and changed COALESCE logic appeared in the generated metric specification",
     "target": "DuckDB fixture-executed with independent expected values",
-    "export": "authorized ZIP contained evidence, findings, model invocation metadata, modernization specification, validation, manifest, and target SQL; generated secret scan passed",
-    "backup_restore": "checksum-verified backup restored; workspace identity and all three sampled run outcomes remained readable"
+    "secret_scans": "generated runtime credentials were absent from the authorized export, all Compose service logs, and the complete evidence volume",
+    "backup_restore": "checksum-verified backup restored; workspace, assessments, evidence, findings, and inference profiles remained present",
+    "bootstrap_idempotency": "default synthetic demo bootstrapped twice; .env SHA-256 and named evidence-volume creation identity were preserved",
+    "browser": "desktop navigation and filtering, explicit live-runtime connection gate, explicit synthetic-demo opt-in, narrow 390x844 responsive layout, accessible labels/skip link, and empty console log passed"
   },
   "boundaries": [
     "The source database and BW/reporting artifacts are synthetic local fixtures, not live SAP or BI systems.",
     "The deterministic provider validates transport and strict structured-output handling but performs no model inference.",
     "No external provider credentials or local model runtime were available for real-inference verification.",
     "DuckDB is fixture-executed, not environment-validated target infrastructure.",
-    "The deployment is single-node and has not been scale, HA, proprietary connector, OIDC, or production certified."
+    "Password/session lifecycle, OIDC, collaboration, complete inference budgets/fallback, proprietary connectors, full automated accessibility, upgrade/multi-node/HA, cloud targets, image signing, and publication remain outside this checkpoint."
   ]
 }
