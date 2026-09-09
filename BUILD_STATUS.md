@@ -18,7 +18,7 @@ Reweft is a pre-release implementation in active construction. The source reposi
 
 The machine-readable record is [contracts/acceptance.yaml](contracts/acceptance.yaml). At repository bootstrap, every release acceptance check is `not_run`. Contributors may advance a result only with a command, date, environment, and durable evidence path. Live SAP, BI SaaS, cloud-target, OIDC, publication, image-signing, and multi-node/HA validation require separately authorized environments and are never inferred from fixtures.
 
-The current default Compose model covers only the synthetic gateway/API path. The API persists its development state in a dedicated SQLite volume. PostgreSQL is opt-in under the `durable` profile and is not connected to application persistence. The `workers` profile contains topology placeholders for PostgreSQL, Temporal, the analysis worker, and the collector; the worker process modules and durable Temporal integration are not implemented or runnable.
+The default Compose model remains the separate labeled synthetic gateway/API path on SQLite. The opt-in `real-runtime` profile is now runnable: it uses PostgreSQL application persistence, Alembic migrations, Temporal, distinct analysis/inference/collector workers, separate source/provider egress networks, a least-privileged synthetic source PostgreSQL, and a labeled deterministic provider. This checkpoint is single-node integration infrastructure, not production certification.
 
 ## Publication
 
@@ -45,4 +45,21 @@ The current default Compose model covers only the synthetic gateway/API path. Th
 | `scripts/smoke-test.sh` and demo snapshot request | Passed | Local HTTP health/root plus `mode=synthetic-demo`; not full browser/E2E/accessibility validation. |
 | Desktop and mobile in-app browser inspection | Passed for inspected routes | 1440×900 overview and 390×844 connections workspace; synthetic fixture only. Captures are under `docs/assets/screenshots/`. |
 
-The local default demo was left running at `http://127.0.0.1:8080` for inspection. These checks do not advance the composite release checks in `contracts/acceptance.yaml`.
+The local default demo was left running at `http://127.0.0.1:8080` for inspection. Those baseline checks alone did not advance the composite release checks in `contracts/acceptance.yaml`; the separate real-runtime checkpoint below advances only requirements it exercised completely.
+
+## Real-runtime checkpoint executed on 2026-09-09
+
+| Check | Result | Boundary |
+|---|---|---|
+| `make test` | Passed: 27 backend, 11 frontend; 1 opt-in live-PostgreSQL pytest skipped | Unit/API/workflow/connector/security-boundary tests plus contract validation; not a production suite. |
+| `make lint` and `make compose-check` | Passed | Production frontend build and Compose resolution. |
+| `tests/integration/run-real-runtime.sh` | Passed | Real local PostgreSQL/Temporal processes with a synthetic Atlas source/artifact estate and a clearly labeled deterministic provider. |
+| Unresolved assessment | Passed | Persisted three evidence artifacts and three evidence-driven findings; completed-with-gaps with explicit settlement/outbound gaps. |
+| Analysis-worker restart during a second run | Passed | Temporal resumed to 100% persisted task progress with no duplicate task, source-operation, or finding keys. |
+| Changed resolved artifact bundle | Passed | A subsequent run completed without gaps, removed the retirement blocker, and propagated the changed `COALESCE` formula into the generated specification. |
+| DuckDB target and authorized export | Passed | Independent expected values matched; ZIP included generated target SQL/manifest and no generated token/password/private-key canaries. |
+| Backup then confirmed restore | Passed | Checksums verified; workspace identity, configuration, evidence, and sampled run outcomes survived restoration. |
+
+The sanitized committed summary is [tests/integration/evidence/20260909-real-runtime-summary.json](tests/integration/evidence/20260909-real-runtime-summary.json). The runtime was left healthy at `http://127.0.0.1:8180`; its volumes, generated configuration, identities, evidence, and backup were preserved.
+
+Remaining release blockers include password/session lifecycle and OIDC, collaboration, native SAP BW and reporting connectors, real model inference, broader provider failure/budget coverage, active reconciliation of every cancellation/unknown source execution, incremental dependency-aware invalidation, cloud targets, full browser accessibility/E2E, multi-node/HA, upgrade testing, SBOM/signing, and publication. The existing deprecation warnings for FastAPI event hooks and Starlette's current test client are also still visible.

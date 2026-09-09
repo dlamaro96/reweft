@@ -1,0 +1,34 @@
+{
+  "schema_version": "reweft.integration-evidence/v1",
+  "executed_at": "2026-09-09T14:14:00Z",
+  "implementation_commit": "32f1250bb57d4869f7c9b983fa84e4c40b056c42",
+  "tested_tree_base": "62c78bd11bbbbfab31e759e5e0c4dc73f91f86ec",
+  "environment": "local ARM64 Docker/Colima; PostgreSQL 16.6; Temporal 1.27.2; labeled deterministic OpenAI-compatible provider",
+  "commands": [
+    "make test",
+    "make lint",
+    "make compose-check",
+    "REWEFT_REAL_ENV_FILE=.data/real-runtime.env tests/integration/run-real-runtime.sh",
+    "REWEFT_REAL_ENV_FILE=.data/real-runtime.env ./scripts/backup-real-runtime.sh",
+    "REWEFT_REAL_ENV_FILE=.data/real-runtime.env ./scripts/restore-real-runtime.sh <generated-backup> --confirm-overwrite"
+  ],
+  "results": {
+    "backend": "27 passed, 1 live-PostgreSQL pytest skipped because it requires an explicit test database URL",
+    "frontend": "11 passed; production TypeScript/Vite build passed",
+    "runtime_topology_and_boundaries": "passed",
+    "authenticated_configuration_and_tests": "passed",
+    "unresolved_assessment": "completed-with-gaps; semantic conflict, non-additive inventory, and retirement blocker retained",
+    "analysis_worker_restart": "recovered to completed-with-gaps with 100% persisted task progress and no duplicate task, operation, or finding keys",
+    "changed_artifact_assessment": "completed; retirement blocker removed and changed COALESCE logic appeared in the generated metric specification",
+    "target": "DuckDB fixture-executed with independent expected values",
+    "export": "authorized ZIP contained evidence, findings, model invocation metadata, modernization specification, validation, manifest, and target SQL; generated secret scan passed",
+    "backup_restore": "checksum-verified backup restored; workspace identity and all three sampled run outcomes remained readable"
+  },
+  "boundaries": [
+    "The source database and BW/reporting artifacts are synthetic local fixtures, not live SAP or BI systems.",
+    "The deterministic provider validates transport and strict structured-output handling but performs no model inference.",
+    "No external provider credentials or local model runtime were available for real-inference verification.",
+    "DuckDB is fixture-executed, not environment-validated target infrastructure.",
+    "The deployment is single-node and has not been scale, HA, proprietary connector, OIDC, or production certified."
+  ]
+}
