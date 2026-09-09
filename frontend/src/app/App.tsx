@@ -28,7 +28,7 @@ const primaryNav: NavItem[] = [
 const settingsNav: NavItem = { label: 'Settings', path: '/settings', icon: Gear };
 const allNav = [...primaryNav, settingsNav];
 
-const pageMeta: Record<string, { title: string; eyebrow: string; description: string }> = {
+export const pageMeta: Record<string, { title: string; eyebrow: string; description: string }> = {
   '/overview': { title: 'Estate overview', eyebrow: 'BW retirement assessment', description: 'Coverage, risk and retirement readiness across the current synthetic estate.' },
   '/connections': { title: 'Connections', eyebrow: 'Configured sources', description: 'Scope, capabilities and source-safety posture for every evidence path.' },
   '/assessments': { title: 'Assessments', eyebrow: 'Autonomous investigation', description: 'Set an objective, inspect the effective policy, and follow evidence collection.' },
@@ -41,7 +41,7 @@ const pageMeta: Record<string, { title: string; eyebrow: string; description: st
   '/welcome': { title: 'Welcome to Reweft', eyebrow: 'Understand your estate', description: 'Connect a real estate or inspect an isolated synthetic demonstration.' },
 };
 
-function usePath() {
+export function usePath() {
   const [path, setPath] = useState(() => pageMeta[window.location.pathname] ? window.location.pathname : '/overview');
   useEffect(() => {
     const onPop = () => setPath(pageMeta[window.location.pathname] ? window.location.pathname : '/overview');
@@ -56,7 +56,7 @@ function usePath() {
   return [path, navigate] as const;
 }
 
-export function App() {
+export function DemoApp() {
   const [path, navigate] = usePath();
   const [snapshot, setSnapshot] = useState<DemoSnapshot | null>(null);
   const [dataNotice, setDataNotice] = useState<string>();
@@ -117,7 +117,7 @@ export function App() {
   </div>;
 }
 
-function Sidebar({ path, open, onClose, navigate }: { path: string; open: boolean; onClose: () => void; navigate: (path: string) => void }) {
+export function Sidebar({ path, open, onClose, navigate }: { path: string; open: boolean; onClose: () => void; navigate: (path: string) => void }) {
   return <><div className={`mobile-scrim ${open ? 'is-open' : ''}`} onClick={onClose}/><aside className={`sidebar ${open ? 'is-open' : ''}`} aria-label="Primary navigation">
     <div className="brand"><div className="brand-mark" aria-hidden="true"><i/><i/><i/></div><div><strong>Reweft</strong><small>Estate modernization</small></div><button className="icon-button mobile-close" aria-label="Close navigation" onClick={onClose}><X size={18}/></button></div>
     <nav className="nav-list">{primaryNav.map(item => <NavButton key={item.path} item={item} active={path === item.path} onClick={() => navigate(item.path)}/>)}</nav>

@@ -1,183 +1,231 @@
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterator
+from typing import Any, overload
+
+from alembic import command
+from alembic.config import Config
+from sqlalchemy import create_engine, event, text
+from sqlalchemy.engine import Connection, Engine, Row
+from sqlalchemy.exc import IntegrityError as SQLAlchemyIntegrityError
+from sqlalchemy.pool import StaticPool
 
 
-SCHEMA = """
-PRAGMA foreign_keys = ON;
+MIGRATION_ADVISORY_LOCK_ID = 7_295_874_021_269_235_081
+ADMISSION_ADVISORY_LOCK_ID = 6_521_031_747_921_004_519
 
-CREATE TABLE IF NOT EXISTS users (
-  id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE, display_name TEXT NOT NULL,
-  created_at TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS bootstrap_tokens (
-  token_hash TEXT PRIMARY KEY, expires_at TEXT NOT NULL, consumed_at TEXT
-);
-CREATE TABLE IF NOT EXISTS api_tokens (
-  id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id),
-  token_hash TEXT NOT NULL UNIQUE, scopes_json TEXT NOT NULL,
-  expires_at TEXT, revoked_at TEXT, created_at TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS workspaces (
-  id TEXT PRIMARY KEY, name TEXT NOT NULL, created_at TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS memberships (
-  workspace_id TEXT NOT NULL REFERENCES workspaces(id),
-  user_id TEXT NOT NULL REFERENCES users(id), role TEXT NOT NULL,
-  PRIMARY KEY(workspace_id, user_id)
-);
-CREATE TABLE IF NOT EXISTS projects (
-  id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id),
-  name TEXT NOT NULL, created_at TEXT NOT NULL,
-  UNIQUE(workspace_id, name)
-);
-CREATE TABLE IF NOT EXISTS inference_profiles (
-  id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id),
-  name TEXT NOT NULL, revision INTEGER NOT NULL, body_json TEXT NOT NULL,
-  created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
-  UNIQUE(workspace_id, name)
-);
-CREATE TABLE IF NOT EXISTS assessments (
-  id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id),
-  project_id TEXT NOT NULL REFERENCES projects(id), state TEXT NOT NULL,
-  version INTEGER NOT NULL, body_json TEXT NOT NULL,
-  created_at TEXT NOT NULL, updated_at TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS ix_assessments_workspace ON assessments(workspace_id, created_at);
-CREATE TABLE IF NOT EXISTS evidence (
-  id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id),
-  project_id TEXT NOT NULL REFERENCES projects(id), run_id TEXT,
-  artifact_sha256 TEXT NOT NULL, body_json TEXT NOT NULL, created_at TEXT NOT NULL,
-  UNIQUE(workspace_id, project_id, artifact_sha256)
-);
-CREATE INDEX IF NOT EXISTS ix_evidence_workspace_run ON evidence(workspace_id, run_id);
-CREATE TABLE IF NOT EXISTS findings (
-  id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id),
-  run_id TEXT NOT NULL REFERENCES assessments(id), stable_key TEXT NOT NULL,
-  body_json TEXT NOT NULL, created_at TEXT NOT NULL,
-  UNIQUE(workspace_id, run_id, stable_key)
-);
-CREATE TABLE IF NOT EXISTS lineage_nodes (
-  id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id),
-  project_id TEXT NOT NULL REFERENCES projects(id), native_id TEXT NOT NULL,
-  namespace TEXT NOT NULL, environment TEXT NOT NULL, body_json TEXT NOT NULL,
-  created_at TEXT NOT NULL,
-  UNIQUE(workspace_id, project_id, namespace, environment, native_id)
-);
-CREATE TABLE IF NOT EXISTS lineage_edges (
-  id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id),
-  project_id TEXT NOT NULL REFERENCES projects(id), from_node_id TEXT NOT NULL,
-  to_node_id TEXT NOT NULL, relationship TEXT NOT NULL, body_json TEXT NOT NULL,
-  created_at TEXT NOT NULL,
-  FOREIGN KEY(from_node_id) REFERENCES lineage_nodes(id),
-  FOREIGN KEY(to_node_id) REFERENCES lineage_nodes(id)
-);
-CREATE INDEX IF NOT EXISTS ix_edges_from ON lineage_edges(workspace_id, from_node_id);
-CREATE INDEX IF NOT EXISTS ix_edges_to ON lineage_edges(workspace_id, to_node_id);
 
--- Resource groups are deployment-wide admission identities. Their labels are never
--- returned through workspace APIs; connections expose only workspace-local aliases.
-CREATE TABLE IF NOT EXISTS resource_groups (
-  id TEXT PRIMARY KEY, parent_id TEXT REFERENCES resource_groups(id),
-  resource_fingerprint TEXT NOT NULL UNIQUE, policy_json TEXT NOT NULL,
-  policy_version INTEGER NOT NULL, fencing_generation INTEGER NOT NULL DEFAULT 0,
-  last_admitted_at TEXT, created_at TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS connection_aliases (
-  workspace_id TEXT NOT NULL REFERENCES workspaces(id), connection_id TEXT NOT NULL,
-  source_id TEXT NOT NULL, resource_group_id TEXT NOT NULL REFERENCES resource_groups(id),
-  connector_id TEXT NOT NULL, allowed_operations_json TEXT NOT NULL,
-  authorized_scope_json TEXT NOT NULL, created_at TEXT NOT NULL,
-  PRIMARY KEY(workspace_id, connection_id, resource_group_id)
-);
-CREATE INDEX IF NOT EXISTS ix_alias_source ON connection_aliases(workspace_id, source_id);
-CREATE TABLE IF NOT EXISTS source_operations (
-  id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL, project_id TEXT NOT NULL,
-  run_id TEXT NOT NULL, task_id TEXT NOT NULL, source_id TEXT NOT NULL,
-  connection_id TEXT NOT NULL, connector_id TEXT NOT NULL,
-  connector_version TEXT NOT NULL, operation_id TEXT NOT NULL,
-  resource_group_ids_json TEXT NOT NULL, request_json TEXT NOT NULL,
-  evidence_fingerprint TEXT NOT NULL, idempotency_key TEXT NOT NULL,
-  cost_class TEXT NOT NULL, state TEXT NOT NULL, slot_charged INTEGER NOT NULL DEFAULT 0,
-  attempt_count INTEGER NOT NULL DEFAULT 0,
-  permit_id TEXT, permit_token_hash TEXT, fencing_generation INTEGER,
-  permit_expires_at TEXT, lease_expires_at TEXT, attempt_id TEXT,
-  source_native_reference TEXT, result_json TEXT, sanitized_error TEXT,
-  queued_at TEXT NOT NULL, admitted_at TEXT, updated_at TEXT NOT NULL,
-  UNIQUE(workspace_id, idempotency_key)
-);
-CREATE INDEX IF NOT EXISTS ix_operations_group_state ON source_operations(state, slot_charged, queued_at);
-CREATE INDEX IF NOT EXISTS ix_operations_fingerprint ON source_operations(workspace_id, evidence_fingerprint);
-CREATE TABLE IF NOT EXISTS operation_events (
-  sequence INTEGER PRIMARY KEY AUTOINCREMENT, workspace_id TEXT NOT NULL,
-  operation_id TEXT NOT NULL, event_type TEXT NOT NULL, body_json TEXT NOT NULL,
-  created_at TEXT NOT NULL
-);
-"""
+class RowAdapter(Mapping[str, Any]):
+    """DB-API/``sqlite3.Row`` compatible view over a SQLAlchemy row."""
+
+    def __init__(self, row: Row[Any]):
+        self._row = row
+        self._mapping = row._mapping
+
+    @overload
+    def __getitem__(self, key: str) -> Any: ...
+
+    @overload
+    def __getitem__(self, key: int) -> Any: ...
+
+    def __getitem__(self, key: str | int) -> Any:
+        if isinstance(key, int):
+            return self._row[key]
+        return self._mapping[key]
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._mapping)
+
+    def __len__(self) -> int:
+        return len(self._mapping)
+
+    def keys(self):
+        return self._mapping.keys()
+
+
+class ResultAdapter:
+    def __init__(self, result: Any):
+        self._result = result
+
+    @property
+    def rowcount(self) -> int:
+        return self._result.rowcount
+
+    def fetchone(self) -> RowAdapter | None:
+        row = self._result.fetchone()
+        return RowAdapter(row) if row is not None else None
+
+    def fetchall(self) -> list[RowAdapter]:
+        return [RowAdapter(row) for row in self._result.fetchall()]
+
+    def __iter__(self) -> Iterator[RowAdapter]:
+        for row in self._result:
+            yield RowAdapter(row)
+
+
+class ConnectionAdapter:
+    """Compatibility surface for existing SQLite-style raw queries."""
+
+    def __init__(self, connection: Connection, dialect_name: str):
+        self._connection = connection
+        self.dialect_name = dialect_name
+
+    def execute(self, statement: str, parameters: Sequence[Any] | Mapping[str, Any] = ()) -> ResultAdapter:
+        sql = self._translate_dialect_sql(statement)
+        if isinstance(parameters, Mapping):
+            bound = dict(parameters)
+        else:
+            sql, bound = _bind_qmarks(sql, tuple(parameters))
+        try:
+            return ResultAdapter(self._connection.execute(text(sql), bound))
+        except SQLAlchemyIntegrityError as exc:
+            # Preserve the error contract already consumed by auth/controller.
+            raise sqlite3.IntegrityError(str(exc.orig)) from exc
+
+    def _translate_dialect_sql(self, statement: str) -> str:
+        if self.dialect_name != "postgresql":
+            return statement
+        sql = statement.replace("INSERT OR IGNORE INTO", "INSERT INTO")
+        if "INSERT OR IGNORE INTO" in statement:
+            sql = f"{sql.rstrip()} ON CONFLICT DO NOTHING"
+        return sql.replace(
+            "json_extract(result_json,'$.actual_usage.response_bytes')",
+            "(result_json::jsonb #>> '{actual_usage,response_bytes}')",
+        )
+
+    def __enter__(self) -> ConnectionAdapter:
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback) -> None:
+        self._connection.close()
+
+
+def _bind_qmarks(statement: str, parameters: tuple[Any, ...]) -> tuple[str, dict[str, Any]]:
+    """Convert qmarks to named binds without touching quoted question marks."""
+
+    output: list[str] = []
+    index = 0
+    quote: str | None = None
+    position = 0
+    while position < len(statement):
+        character = statement[position]
+        if quote:
+            output.append(character)
+            if character == quote:
+                if position + 1 < len(statement) and statement[position + 1] == quote:
+                    output.append(statement[position + 1])
+                    position += 1
+                else:
+                    quote = None
+        elif character in {"'", '"'}:
+            quote = character
+            output.append(character)
+        elif character == "?":
+            if index >= len(parameters):
+                raise ValueError("not enough parameters for SQL qmarks")
+            output.append(f":p{index}")
+            index += 1
+        else:
+            output.append(character)
+        position += 1
+    if index != len(parameters):
+        raise ValueError("too many parameters for SQL qmarks")
+    return "".join(output), {f"p{number}": value for number, value in enumerate(parameters)}
 
 
 class Database:
-    """Small durable store for development and tests.
+    """SQLAlchemy database retaining the current raw-query repository API.
 
-    Each transaction gets a fresh connection. ``BEGIN IMMEDIATE`` serializes the
-    short admission decision across API/collector processes sharing the database.
-    Production deployments can replace this repository with PostgreSQL while
-    preserving the controller contract.
+    Paths and ``:memory:`` are explicit SQLite demo/test stores. SQLAlchemy URLs
+    select their dialect; real mode supplies ``postgresql+psycopg://``.
     """
 
-    def __init__(self, path: str | Path):
-        self.path = str(path)
-        if self.path != ":memory:":
-            Path(self.path).parent.mkdir(parents=True, exist_ok=True)
+    def __init__(self, path_or_url: str | Path):
+        raw = str(path_or_url)
+        if raw.startswith("postgresql://"):
+            self.url = raw.replace("postgresql://", "postgresql+psycopg://", 1)
+        elif "://" in raw:
+            self.url = raw
+        elif raw == ":memory:":
+            self.url = "sqlite+pysqlite:///:memory:"
+        else:
+            path = Path(raw)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            self.url = f"sqlite+pysqlite:///{path.absolute()}"
+        self.engine = self._build_engine(self.url)
+        self.dialect_name = self.engine.dialect.name
+        self.path = raw
 
-    def connect(self) -> sqlite3.Connection:
-        connection = sqlite3.connect(self.path, timeout=15, isolation_level=None)
-        connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA foreign_keys = ON")
-        connection.execute("PRAGMA busy_timeout = 15000")
-        if self.path != ":memory:":
-            connection.execute("PRAGMA journal_mode = WAL")
-        return connection
+    @staticmethod
+    def _build_engine(url: str) -> Engine:
+        kwargs: dict[str, Any] = {"pool_pre_ping": True}
+        if url == "sqlite+pysqlite:///:memory:":
+            kwargs.update(connect_args={"check_same_thread": False}, poolclass=StaticPool)
+        elif url.startswith("sqlite"):
+            kwargs.update(connect_args={"timeout": 15})
+        engine = create_engine(url, **kwargs)
+        if engine.dialect.name == "sqlite":
+            @event.listens_for(engine, "connect")
+            def configure_sqlite(dbapi_connection, _connection_record) -> None:
+                cursor = dbapi_connection.cursor()
+                cursor.execute("PRAGMA foreign_keys = ON")
+                cursor.execute("PRAGMA busy_timeout = 15000")
+                if url != "sqlite+pysqlite:///:memory:":
+                    cursor.execute("PRAGMA journal_mode = WAL")
+                cursor.close()
+        return engine
 
     def initialize(self) -> None:
-        with self.connect() as connection:
-            connection.executescript(SCHEMA)
+        """Upgrade to head under a cross-replica PostgreSQL advisory lock."""
+
+        config = Config(str(Path(__file__).parents[3] / "alembic.ini"))
+        config.set_main_option("script_location", str(Path(__file__).parents[3] / "migrations"))
+        config.set_main_option("sqlalchemy.url", self.url.replace("%", "%%"))
+        with self.engine.connect() as connection:
+            if self.dialect_name == "postgresql":
+                transaction = connection.begin()
+                try:
+                    connection.execute(text("SELECT pg_advisory_xact_lock(:lock_id)"), {"lock_id": MIGRATION_ADVISORY_LOCK_ID})
+                    config.attributes["connection"] = connection
+                    command.upgrade(config, "head")
+                    transaction.commit()
+                except Exception:
+                    transaction.rollback()
+                    raise
+            else:
+                config.attributes["connection"] = connection
+                command.upgrade(config, "head")
+
+    def connect(self) -> ConnectionAdapter:
+        return ConnectionAdapter(self.engine.connect(), self.dialect_name)
 
     @contextmanager
-    def transaction(self, *, immediate: bool = False) -> Iterator[sqlite3.Connection]:
-        connection = self.connect()
+    def transaction(self, *, immediate: bool = False) -> Iterator[ConnectionAdapter]:
+        connection = self.engine.connect()
+        transaction = None
         try:
-            connection.execute("BEGIN IMMEDIATE" if immediate else "BEGIN")
-            yield connection
-            connection.commit()
+            if immediate and self.dialect_name == "sqlite":
+                connection.exec_driver_sql("BEGIN IMMEDIATE")
+            else:
+                transaction = connection.begin()
+                if immediate and self.dialect_name == "postgresql":
+                    connection.execute(text("SELECT pg_advisory_xact_lock(:lock_id)"), {"lock_id": ADMISSION_ADVISORY_LOCK_ID})
+            yield ConnectionAdapter(connection, self.dialect_name)
+            if transaction is not None:
+                transaction.commit()
+            else:
+                connection.commit()
         except Exception:
-            connection.rollback()
+            if transaction is not None and transaction.is_active:
+                transaction.rollback()
+            elif connection.in_transaction():
+                connection.rollback()
             raise
         finally:
             connection.close()
-        connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA foreign_keys = ON")
-        connection.execute("PRAGMA busy_timeout = 10000")
-        if self.path != ":memory:":
-            connection.execute("PRAGMA journal_mode = WAL")
-        return connection
 
-    def initialize(self) -> None:
-        with self.connect() as connection:
-            connection.executescript(SCHEMA)
-
-    @contextmanager
-    def transaction(self, *, immediate: bool = False) -> Iterator[sqlite3.Connection]:
-        connection = self.connect()
-        try:
-            connection.execute("BEGIN IMMEDIATE" if immediate else "BEGIN")
-            yield connection
-            connection.commit()
-        except Exception:
-            connection.rollback()
-            raise
-        finally:
-            connection.close()
+    def dispose(self) -> None:
+        self.engine.dispose()

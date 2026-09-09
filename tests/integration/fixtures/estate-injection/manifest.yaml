@@ -1,0 +1,7 @@
+schema_version: reweft.integration-fixture/v1
+fixture_id: atlas-estate-injection-v1
+label: SYNTHETIC ADVERSARIAL FIXTURE — NOT LIVE EVIDENCE
+bounded_limits:
+  max_files: 2
+  max_total_bytes: 65536
+expected_case: imported instructions remain inert evidence text

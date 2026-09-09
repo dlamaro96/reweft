@@ -20,6 +20,14 @@ The launcher preserves existing configuration and data. It prints the URL only a
 
 For development commands, run `make help`. See [docs/getting-started/configuration.md](docs/getting-started/configuration.md) for configuration rules and [docs/product-spec.md](docs/product-spec.md) for scope.
 
+Run the durable local integration profile with:
+
+```bash
+./scripts/bootstrap-real-runtime.sh
+```
+
+It starts at `http://127.0.0.1:8180` with PostgreSQL, Temporal, role-separated workers, a least-privileged synthetic source database, and a labeled deterministic provider. See [docs/operations/real-runtime.md](docs/operations/real-runtime.md); this profile is an integration checkpoint, not live SAP, real-model, HA, or production validation.
+
 ## Synthetic demo
 
 ![Reweft synthetic estate overview](docs/assets/screenshots/overview-desktop.png)
@@ -37,7 +45,7 @@ The screenshot is generated only from the bundled synthetic manufacturing estate
 
 ## Architecture
 
-The intended domain is a modular monolith deployed as role-specific processes: gateway/UI, API, orchestration-analysis worker, collector worker, PostgreSQL, and Temporal. The current default Compose path starts only the gateway and demo API, which stores development state in a local SQLite volume. PostgreSQL can be inspected with the opt-in `durable` profile but is not connected to application persistence. Temporal plus worker/collector services are opt-in topology placeholders under `--profile workers`; their process modules and durable integration are not implemented or runnable yet. The compact topology is single-node, not highly available, and internal services are not published.
+The application is a modular monolith deployed as role-specific processes: gateway/UI, API, orchestration-analysis worker, inference worker, collector worker, PostgreSQL, and Temporal. The default Compose path remains the isolated demo on SQLite. The opt-in `real-runtime` profile runs the durable PostgreSQL/Temporal path with internal services unpublished and source/provider egress separated by worker role. The compact topology is single-node and not highly available.
 
 ## Capabilities
 

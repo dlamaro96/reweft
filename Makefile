@@ -18,7 +18,7 @@ bootstrap-demo:
 	./scripts/bootstrap.sh --demo
 
 compose-check:
-	REWEFT_SECRET_KEY=compose-check-only POSTGRES_PASSWORD=compose-check-only TEMPORAL_DB_PASSWORD=compose-check-only DATABASE_URL=postgresql://reweft:compose-check-only@postgres:5432/reweft docker compose --env-file .env.example config --quiet
+	REWEFT_SECRET_KEY=compose-check-only REWEFT_BOOTSTRAP_TOKEN=compose-check-only-compose-check-only REWEFT_COLLECTOR_SERVICE_TOKEN=compose-check-only REWEFT_ANALYSIS_SERVICE_TOKEN=compose-check-only REWEFT_DB_ADMIN_PASSWORD=compose-check-only REWEFT_APP_DB_PASSWORD=compose-check-only REWEFT_SOURCE_ADMIN_PASSWORD=compose-check-only REWEFT_SOURCE_READER_PASSWORD=compose-check-only POSTGRES_PASSWORD=compose-check-only TEMPORAL_DB_PASSWORD=compose-check-only DATABASE_URL=postgresql://reweft:compose-check-only@postgres:5432/reweft docker compose --env-file .env.example config --quiet
 
 contracts:
 	uv run --with pyyaml --with jsonschema python tests/contracts/validate_contracts.py

@@ -1,0 +1,12 @@
+schema_version: reweft.integration-fixture/v1
+fixture_id: atlas-estate-resolved-v2
+label: SYNTHETIC INTEGRATION FIXTURE — NOT LIVE EVIDENCE
+source_name: Atlas Foundry
+bounded_limits:
+  max_files: 4
+  max_total_bytes: 262144
+expected_cases:
+  metrics: [recognized_revenue, adjusted_revenue]
+  non_additive_measure: inventory_on_hand
+  outbound_dependency: year_end_dispatch_file -> finance-archive-v2
+  resolved_logic: dynamic_settlement_rule
