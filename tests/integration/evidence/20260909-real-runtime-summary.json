@@ -1,7 +1,7 @@
 {
   "schema_version": "reweft.integration-evidence/v1",
   "executed_at": "2026-09-09T15:19:25Z",
-  "implementation_commit": "5316896",
+  "implementation_commit": "8002967",
   "tested_tree_base": "62c78bd11bbbbfab31e759e5e0c4dc73f91f86ec",
   "environment": "local ARM64 Docker/Colima; PostgreSQL 16.6; Temporal 1.27.2; labeled deterministic OpenAI-compatible provider; in-app browser",
   "commands": [
@@ -16,7 +16,7 @@
     "./scripts/bootstrap.sh --demo (executed twice)"
   ],
   "results": {
-    "backend": "44 passed, 1 opt-in live-PostgreSQL pytest skipped because it requires an explicit test database URL",
+    "backend": "45 passed, 1 opt-in live-PostgreSQL pytest skipped because it requires an explicit test database URL",
     "frontend": "11 passed; production TypeScript/Vite build passed",
     "runtime_topology_and_boundaries": "passed",
     "authenticated_configuration_and_tests": "passed through API harness; authenticated browser entry remains blocked on action-time confirmation for entering the generated local test token",

@@ -51,7 +51,7 @@ The local default demo was left running at `http://127.0.0.1:8080` for inspectio
 
 | Check | Result | Boundary |
 |---|---|---|
-| `make test` | Passed: 44 backend, 11 frontend; 1 opt-in live-PostgreSQL pytest skipped | Unit/API/workflow/connector/security-boundary tests plus contract validation; not a production suite. |
+| `make test` | Passed: 45 backend, 11 frontend; 1 opt-in live-PostgreSQL pytest skipped | Unit/API/workflow/connector/security-boundary tests plus contract validation; not a production suite. |
 | `make lint` and `make compose-check` | Passed | Production frontend build and Compose resolution. |
 | `tests/integration/run-real-runtime.sh` | Passed | Real local PostgreSQL/Temporal processes with a synthetic Atlas source/artifact estate and a clearly labeled deterministic provider. |
 | Unresolved assessment | Passed | Persisted three evidence artifacts and three evidence-driven findings; completed-with-gaps with explicit settlement/outbound gaps. |
