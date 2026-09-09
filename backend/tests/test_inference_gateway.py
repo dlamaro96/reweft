@@ -246,3 +246,33 @@ async def test_azure_transport_uses_api_key_without_authorization_header():
     assert observed["api-key"] == "canary-provider-secret"
     assert "authorization" not in observed
     await client.aclose()
+
+
+@pytest.mark.anyio
+async def test_native_openai_transport_uses_default_responses_endpoint(monkeypatch):
+    observed = {}
+    monkeypatch.setattr("socket.getaddrinfo", lambda *_: [(2, 1, 6, "", ("203.0.113.10", 443))])
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        observed["url"] = str(request.url)
+        observed["headers"] = dict(request.headers)
+        return httpx.Response(
+            200,
+            json={
+                "id": "resp_openai",
+                "status": "completed",
+                "output_text": json.dumps({"protocol": "reweft-provider-probe", "structured": True}),
+            },
+        )
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    gateway = InferenceGateway(StaticSecret(), EndpointPolicy({"https://api.openai.com"}), client)
+    native = profile(
+        provider=ProviderType.OPENAI,
+        endpoint_class=EndpointClass.PUBLIC,
+        base_url=None,
+    )
+    await gateway.probe(native)
+    assert observed["url"] == "https://api.openai.com/v1/responses"
+    assert observed["headers"]["authorization"] == "Bearer canary-provider-secret"
+    await client.aclose()
