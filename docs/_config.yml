@@ -1,0 +1,9 @@
+title: Reweft documentation
+description: Evidence-backed data-estate assessment and modernization
+url: https://dlamaro96.github.io
+baseurl: /reweft
+repository: dlamaro96/reweft
+theme: minima
+header_pages:
+  - index.md
+  - product-spec.md
