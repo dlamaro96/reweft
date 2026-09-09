@@ -1,0 +1,11 @@
+{
+  "eventTime": "2026-02-28T08:00:00Z",
+  "eventType": "COMPLETE",
+  "producer": "https://reweft.dev/synthetic-estate/loomworks-v1",
+  "schemaURL": "https://openlineage.io/spec/2-0-2/OpenLineage.json#/$defs/RunEvent",
+  "run": {"runId": "00000000-0000-4000-8000-000000000001"},
+  "job": {"namespace": "synthetic://loomworks", "name": "carrier_dispatch"},
+  "inputs": [{"namespace": "postgres://synthetic/loomworks", "name": "current_orders"}],
+  "outputs": [{"namespace": "file://synthetic/outbound", "name": "carrier_dispatch.csv"}]
+}
+

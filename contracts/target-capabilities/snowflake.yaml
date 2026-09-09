@@ -1,0 +1,12 @@
+schema_version: reweft.target-capability/v1
+id: snowflake
+display_name: Snowflake reference pack
+adapter_status: design
+capabilities:
+  - {id: specification_export, support: planned}
+  - {id: sql_models, support: planned}
+  - {id: infrastructure_templates, support: planned}
+  - {id: environment_execution, support: planned}
+validation: {status: not_run, last_verified: null, evidence: null}
+gaps: [No Snowflake account, edition, or warehouse configuration has been tested.]
+

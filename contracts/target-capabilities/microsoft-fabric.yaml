@@ -1,0 +1,12 @@
+schema_version: reweft.target-capability/v1
+id: microsoft-fabric
+display_name: Microsoft Fabric reference pack
+adapter_status: design
+capabilities:
+  - {id: specification_export, support: planned}
+  - {id: sql_models, support: planned}
+  - {id: semantic_models, support: planned}
+  - {id: environment_execution, support: planned}
+validation: {status: not_run, last_verified: null, evidence: null}
+gaps: [No Fabric tenant, capacity, or API version has been tested.]
+

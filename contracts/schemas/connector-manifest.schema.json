@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://reweft.dev/contracts/connector-manifest.schema.json",
+  "title": "Reweft connector manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "display_name", "kind", "release_visibility", "maturity", "operations", "validation", "limitations"],
+  "properties": {
+    "schema_version": {"const": "reweft.connector/v1"},
+    "id": {"type": "string", "pattern": "^[a-z][a-z0-9._-]+$"},
+    "display_name": {"type": "string", "minLength": 1},
+    "kind": {"enum": ["native", "artifact_import", "lineage_import", "optional_runtime"]},
+    "release_visibility": {"enum": ["usable", "experimental", "hidden"]},
+    "maturity": {"enum": ["design", "implemented", "fixture_tested", "live_tested"]},
+    "operations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "mode", "controller_required"],
+        "properties": {
+          "id": {"type": "string"},
+          "mode": {"enum": ["metadata_read", "bounded_profile", "artifact_parse", "lineage_import"]},
+          "controller_required": {"const": true},
+          "cancellation": {"enum": ["confirmed", "best_effort", "unsupported", "not_applicable"]}
+        }
+      }
+    },
+    "configuration_schema": {"type": ["string", "null"]},
+    "validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fixture", "live", "last_verified"],
+      "properties": {
+        "fixture": {"enum": ["not_run", "passed", "failed"]},
+        "live": {"enum": ["not_run", "passed", "failed", "unavailable"]},
+        "last_verified": {"type": ["string", "null"], "format": "date"},
+        "evidence": {"type": ["string", "null"]}
+      }
+    },
+    "limitations": {"type": "array", "items": {"type": "string", "minLength": 1}}
+  }
+}
+

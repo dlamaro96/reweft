@@ -1,0 +1,12 @@
+schema_version: reweft.target-capability/v1
+id: databricks
+display_name: Databricks reference pack
+adapter_status: design
+capabilities:
+  - {id: specification_export, support: planned}
+  - {id: sql_models, support: planned}
+  - {id: infrastructure_templates, support: planned}
+  - {id: environment_execution, support: planned}
+validation: {status: not_run, last_verified: null, evidence: null}
+gaps: [No Databricks workspace or runtime version has been tested.]
+

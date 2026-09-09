@@ -1,0 +1,19 @@
+schema_version: reweft.connector/v1
+id: artifact-bundle
+display_name: Pipeline and reporting artifact bundle
+kind: artifact_import
+release_visibility: hidden
+maturity: design
+configuration_schema: null
+operations:
+  - {id: inspect_archive, mode: artifact_parse, controller_required: true, cancellation: not_applicable}
+  - {id: import_artifacts, mode: artifact_parse, controller_required: true, cancellation: not_applicable}
+validation:
+  fixture: not_run
+  live: not_run
+  last_verified: null
+  evidence: null
+limitations:
+  - Supported formats are parser-specific; arbitrary project code, macros, and DAGs are never executed.
+  - Unknown or dynamic constructs remain unresolved rather than inferred as complete.
+

@@ -1,0 +1,29 @@
+{
+  "fixture": "synthetic",
+  "format": "reweft-synthetic-report/v1",
+  "reports": [
+    {
+      "id": "monthly-sales",
+      "title": "Net Revenue Summary",
+      "metric": "NET_REVENUE",
+      "grain": "invoice line aggregated by month",
+      "usage_observation": {"from": "2026-01-01", "to": "2026-06-30", "executions": 47}
+    },
+    {
+      "id": "monthly-adjusted-sales",
+      "title": "Net Revenue Summary",
+      "metric": "ADJUSTED_NET_REVENUE",
+      "grain": "invoice line plus one monthly adjustment",
+      "usage_observation": {"from": "2026-01-01", "to": "2026-06-30", "executions": 12}
+    },
+    {
+      "id": "annual-trade-compliance",
+      "title": "Annual Trade Filing",
+      "metric": "NET_REVENUE",
+      "usage_observation": {"from": "2026-01-01", "to": "2026-06-30", "executions": 0},
+      "criticality": "unknown",
+      "note": "A six-month window cannot establish annual disuse."
+    }
+  ]
+}
+

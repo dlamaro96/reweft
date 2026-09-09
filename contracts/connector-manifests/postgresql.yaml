@@ -1,0 +1,20 @@
+schema_version: reweft.connector/v1
+id: postgresql
+display_name: PostgreSQL
+kind: native
+release_visibility: hidden
+maturity: design
+configuration_schema: null
+operations:
+  - {id: test_connection, mode: metadata_read, controller_required: true, cancellation: best_effort}
+  - {id: discover_catalog, mode: metadata_read, controller_required: true, cancellation: best_effort}
+  - {id: profile_columns, mode: bounded_profile, controller_required: true, cancellation: best_effort}
+validation:
+  fixture: not_run
+  live: not_run
+  last_verified: null
+  evidence: null
+limitations:
+  - Hidden until the implementation and local-database contract suite pass.
+  - Assessment credentials must be read-only; Reweft cannot prove privileges outside the configured database.
+

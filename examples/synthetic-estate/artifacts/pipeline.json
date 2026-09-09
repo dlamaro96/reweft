@@ -1,0 +1,15 @@
+{
+  "name": "synthetic_carrier_dispatch",
+  "properties": {
+    "activities": [
+      {
+        "name": "export_dispatch_file",
+        "type": "Copy",
+        "inputs": [{"referenceName": "current_orders", "type": "DatasetReference"}],
+        "outputs": [{"referenceName": "carrier_dispatch_csv", "type": "DatasetReference"}]
+      }
+    ]
+  },
+  "fixture_notice": "Original synthetic ADF-shaped JSON; no live tenant export."
+}
+

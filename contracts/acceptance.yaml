@@ -1,0 +1,267 @@
+schema_version: reweft.acceptance/v1
+updated_at: "2026-09-09T00:00:00Z"
+status_definitions:
+  passed: Executed successfully with durable evidence.
+  failed: Executed and did not meet the requirement.
+  not_run: Not executed; implementation presence is not a pass.
+  not_live_verified: Fixture or contract coverage exists but the named live environment was unavailable.
+checks:
+  - id: INSTALL-01
+    requirement: Clean supported machine starts the default stack without local application-language toolchains.
+    implementation_paths: [compose.yaml, scripts/bootstrap.sh, scripts/bootstrap.ps1]
+    tests: [scripts/smoke-test.sh]
+    execution: {status: not_run, reason: Clean-machine image test has not run.}
+    evidence_artifact: null
+    release_blocking: true
+  - id: INSTALL-02
+    requirement: Bootstrap is idempotent, preserves data/configuration, and reports actionable prerequisite failures.
+    implementation_paths: [scripts/bootstrap.sh, scripts/bootstrap.ps1]
+    tests: [tests/contracts]
+    execution: {status: not_run, reason: Idempotency test has not run.}
+    evidence_artifact: null
+    release_blocking: true
+  - id: UX-01
+    requirement: Light mode is default and primary screens pass browser, accessibility, and screenshot inspection.
+    implementation_paths: [frontend]
+    tests: [frontend/e2e]
+    execution: {status: not_run, reason: Browser and accessibility suites have not run.}
+    evidence_artifact: null
+    release_blocking: true
+  - id: UX-02
+    requirement: A user can configure one model and source, inspect limits, and start without code edits.
+    implementation_paths: [frontend, backend]
+    tests: [frontend/e2e]
+    execution: {status: not_run, reason: End-to-end onboarding has not run.}
+    evidence_artifact: null
+    release_blocking: true
+  - id: DEMO-01
+    requirement: No-key demo works, is labeled synthetic, and never masquerades as live SAP or inference.
+    implementation_paths: [examples/synthetic-estate, examples/configurations/demo.yaml]
+    tests: [frontend/e2e, tests/integration]
+    execution: {status: not_run, reason: Demo workflow has not run.}
+    evidence_artifact: null
+    release_blocking: true
+  - id: MODEL-01
+    requirement: Provider/model changes require no rebuild and native/OpenAI-compatible paths pass contracts.
+    implementation_paths: [backend/src/reweft/inference, contracts/schemas/config.schema.json]
+    tests: [backend/tests, tests/contracts]
+    execution: {status: not_run, reason: Provider contract tests have not run.}
+    evidence_artifact: null
+    release_blocking: true
+  - id: MODEL-02
+    requirement: Unsupported capabilities, outages, and invalid outputs have bounded honest outcomes.
+    implementation_paths: [backend/src/reweft/inference]
+    tests: [backend/tests]
+    execution: {status: not_run, reason: Failure-mode tests have not run.}
+    evidence_artifact: null
+    release_blocking: true
+  - id: MODEL-03
+    requirement: Fallback respects egress and shared token/cost limits include delegated work.
+    implementation_paths: [backend/src/reweft/inference]
+    tests: [backend/tests]
+    execution: {status: not_run, reason: Policy and budget tests have not run.}
+    evidence_artifact: null
+    release_blocking: true
+  - id: AUTH-01
+    requirement: Local auth and configured OIDC work without default passwords or exposed bypass.
+    implementation_paths: [backend/src/reweft/auth]
+    tests: [backend/tests, frontend/e2e]
+    execution: {status: not_run, reason: Auth tests have not run.}
+    evidence_artifact: null
+    release_blocking: true
+  - id: AUTH-02
+    requirement: Cross-workspace isolation covers API, graph, search, cache, evidence, SSE, exports, and jobs.
+    implementation_paths: [backend/src/reweft]
+    tests: [tests/security, backend/tests]
+    execution: {status: not_run, reason: Isolation suite has not run.}
+    evidence_artifact: null
+    release_blocking: true
+  - id: SOURCE-01
+    requirement: Every source operation including preflight and retries uses controller admission.
+    implementation_paths: [backend/src/reweft/source_control, backend/src/reweft/connectors]
+    tests: [backend/tests]
+    execution: {status: not_run, reason: Source-path tests have not run.}
+    evidence_artifact: null
+    release_blocking: true
+  - id: SOURCE-02
+    requirement: Shared aliases, agents, and workers cannot exceed a resource-group admission limit.
+    implementation_paths: [backend/src/reweft/source_control]
+    tests: [backend/tests, tests/integration]
+    execution: {status: not_run, reason: Multi-worker admission test has not run.}
+    evidence_artifact: null
+    release_blocking: true
+  - id: SOURCE-03
+    requirement: Timeout or lease expiry cannot unsafely release uncertain source capacity.
+    implementation_paths: [backend/src/reweft/source_control]
+    tests: [backend/tests, tests/resilience]
+    execution: {status: not_run, reason: Uncertain-execution test has not run.}
+    evidence_artifact: null
+    release_blocking: true
+  - id: SOURCE-04
+    requirement: Degradation and missing telemetry are conservative and admission-authority loss stops new work.
+    implementation_paths: [backend/src/reweft/source_control]
+    tests: [backend/tests, tests/resilience]
+    execution: {status: not_run, reason: Degradation tests have not run.}
+    evidence_artifact: null
+    release_blocking: true
+  - id: SOURCE-05
+    requirement: Native PostgreSQL collection and cancellation/status tests run against a real local database.
+    implementation_paths: [backend/src/reweft/connectors]
+    tests: [tests/integration]
+    execution: {status: not_run, reason: Local PostgreSQL connector integration has not run.}
+    evidence_artifact: null
+    release_blocking: true
+  - id: SOURCE-06
+    requirement: Mutation and arbitrary execution are blocked independently of prompt instructions.
+    implementation_paths: [backend/src/reweft/source_control, backend/src/reweft/connectors]
+    tests: [tests/security]
+    execution: {status: not_run, reason: Source mutation tests have not run.}
+    evidence_artifact: null
+    release_blocking: true
+  - id: SAP-01
+    requirement: BW adapter/import scope is implemented and fixture/live/version validation is distinguished.
+    implementation_paths: [backend/src/reweft/connectors, integrations, contracts/connector-manifests]
+    tests: [backend/tests]
+    execution: {status: not_run, reason: BW fixtures and live adapters have not been validated.}
+    evidence_artifact: null
+    release_blocking: true
+  - id: CONNECT-01
+    requirement: Every visible usable connector has operations, configuration, scope docs, and contract tests.
+    implementation_paths: [contracts/connector-manifests, backend/src/reweft/connectors]
+    tests: [backend/tests]
+    execution: {status: not_run, reason: Connector registry audit has not run.}
+    evidence_artifact: null
+    release_blocking: true
+  - id: DURABLE-01
+    requirement: Worker/API restart preserves progress without duplicate findings or unsafe source work.
+    implementation_paths: [backend/src/reweft/orchestration]
+    tests: [tests/resilience]
+    execution: {status: not_run, reason: Restart test has not run.}
+    evidence_artifact: null
+    release_blocking: true
+  - id: DURABLE-02
+    requirement: Replay, retries, event deduplication, lifecycle controls, and history bounds are tested.
+    implementation_paths: [backend/src/reweft/orchestration]
+    tests: [tests/resilience]
+    execution: {status: not_run, reason: Temporal resilience suite has not run.}
+    evidence_artifact: null
+    release_blocking: true
+  - id: EVIDENCE-01
+    requirement: Findings resolve to spans and knowledge/validation states remain distinct.
+    implementation_paths: [backend/src/reweft/evidence, backend/src/reweft/domain]
+    tests: [backend/tests]
+    execution: {status: not_run, reason: Evidence provenance tests have not run.}
+    evidence_artifact: null
+    release_blocking: true
+  - id: EVIDENCE-02
+    requirement: Partial scans and permission changes cannot create false deletions or completeness.
+    implementation_paths: [backend/src/reweft/evidence]
+    tests: [backend/tests]
+    execution: {status: not_run, reason: Snapshot completeness tests have not run.}
+    evidence_artifact: null
+    release_blocking: true
+  - id: AGENT-01
+    requirement: Representative investigation replans from evidence with bounded follow-up work.
+    implementation_paths: [backend/src/reweft/agents, backend/src/reweft/orchestration]
+    tests: [tests/evaluations]
+    execution: {status: not_run, reason: Agent evaluation has not run.}
+    evidence_artifact: null
+    release_blocking: true
+  - id: AGENT-02
+    requirement: Prompt injection and loops cannot expand scope or cause uncontrolled execution.
+    implementation_paths: [backend/src/reweft/agents, backend/src/reweft/source_control]
+    tests: [tests/security, tests/evaluations]
+    execution: {status: not_run, reason: Adversarial evaluation has not run.}
+    evidence_artifact: null
+    release_blocking: true
+  - id: MODERN-01
+    requirement: Sample estate produces coherent architecture, models, pipelines, and semantic mappings.
+    implementation_paths: [backend/src/reweft/modernization, examples/synthetic-estate]
+    tests: [tests/integration]
+    execution: {status: not_run, reason: Modernization fixture has not run.}
+    evidence_artifact: null
+    release_blocking: true
+  - id: MODERN-02
+    requirement: Scenarios reuse unchanged evidence and version decisions and assumptions.
+    implementation_paths: [backend/src/reweft/modernization, backend/src/reweft/collaboration]
+    tests: [backend/tests]
+    execution: {status: not_run, reason: Scenario versioning tests have not run.}
+    evidence_artifact: null
+    release_blocking: true
+  - id: REPORT-01
+    requirement: Report logic, security/distribution dependencies, and dispositions affect retirement.
+    implementation_paths: [backend/src/reweft/assessment, backend/src/reweft/parsers]
+    tests: [backend/tests]
+    execution: {status: not_run, reason: Report assessment tests have not run.}
+    evidence_artifact: null
+    release_blocking: true
+  - id: RETIRE-01
+    requirement: Graph retirement analysis detects outbound dependencies and missing history preservation.
+    implementation_paths: [backend/src/reweft/lineage, backend/src/reweft/assessment]
+    tests: [backend/tests, tests/integration]
+    execution: {status: not_run, reason: Retirement simulation has not run.}
+    evidence_artifact: null
+    release_blocking: true
+  - id: TARGET-01
+    requirement: Local target executes on fixtures while other targets expose precise gaps.
+    implementation_paths: [backend/src/reweft/target_adapters, contracts/target-capabilities]
+    tests: [tests/integration]
+    execution: {status: not_run, reason: Local target execution has not run.}
+    evidence_artifact: null
+    release_blocking: true
+  - id: VERIFY-01
+    requirement: Semantic tests catch conflicting revenue and non-additive inventory behavior.
+    implementation_paths: [backend/src/reweft/verification, examples/synthetic-estate]
+    tests: [tests/integration]
+    execution: {status: not_run, reason: Semantic verification has not run.}
+    evidence_artifact: null
+    release_blocking: true
+  - id: COLLAB-01
+    requirement: Authorized multi-user comments/edits have audit history and conflict-safe versions.
+    implementation_paths: [backend/src/reweft/collaboration, frontend]
+    tests: [backend/tests, frontend/e2e]
+    execution: {status: not_run, reason: Collaboration tests have not run.}
+    evidence_artifact: null
+    release_blocking: true
+  - id: SECURITY-01
+    requirement: Secrets are absent from UI, logs, exports, demos, support bundles, and public artifacts.
+    implementation_paths: [backend, frontend, scripts, examples]
+    tests: [tests/security]
+    execution: {status: not_run, reason: Secret-leak suite and tracked-tree scan have not run.}
+    evidence_artifact: null
+    release_blocking: true
+  - id: SECURITY-02
+    requirement: SSRF, import, rendering, and sandbox boundaries are tested and documented.
+    implementation_paths: [backend, docs/security]
+    tests: [tests/security]
+    execution: {status: not_run, reason: Security suite has not run.}
+    evidence_artifact: null
+    release_blocking: true
+  - id: EXPORT-01
+    requirement: Exports are readable, evidence-linked, versioned, authenticated, and secret-free.
+    implementation_paths: [backend/src/reweft/reporting]
+    tests: [backend/tests, tests/integration]
+    execution: {status: not_run, reason: Export tests have not run.}
+    evidence_artifact: null
+    release_blocking: true
+  - id: OPS-01
+    requirement: Backup/restore and upgrades pass and deployment claims distinguish single-node from HA.
+    implementation_paths: [scripts, compose.yaml, docs]
+    tests: [tests/integration]
+    execution: {status: not_run, reason: "Backup, restore, and upgrade tests have not run."}
+    evidence_artifact: null
+    release_blocking: true
+  - id: OSS-01
+    requirement: License, notices, contribution/security/governance, templates, and actual maintainer setup exist.
+    implementation_paths: [LICENSE, NOTICE, THIRD_PARTY_NOTICES.md, CONTRIBUTING.md, SECURITY.md, GOVERNANCE.md, MAINTAINERS.md, .github]
+    tests: [scripts/release-check.sh]
+    execution: {status: not_run, reason: Repository policy audit has not run.}
+    evidence_artifact: null
+    release_blocking: true
+  - id: RELEASE-01
+    requirement: CI, dependency/security/license, image smoke, SBOM/provenance, and release notes run or show blockers.
+    implementation_paths: [.github/workflows, scripts/release-check.sh]
+    tests: [.github/workflows]
+    execution: {status: not_run, reason: No CI or release workflow has run and no release was published.}
+    evidence_artifact: null
+    release_blocking: true

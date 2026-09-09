@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://reweft.dev/contracts/target-capability.schema.json",
+  "title": "Reweft target capability record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "display_name", "adapter_status", "capabilities", "validation", "gaps"],
+  "properties": {
+    "schema_version": {"const": "reweft.target-capability/v1"},
+    "id": {"type": "string", "pattern": "^[a-z][a-z0-9._-]+$"},
+    "display_name": {"type": "string", "minLength": 1},
+    "adapter_status": {"enum": ["design", "implemented", "fixture_tested", "environment_tested"]},
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "support"],
+        "properties": {
+          "id": {"type": "string"},
+          "support": {"enum": ["planned", "generated", "schema_validated", "fixture_tested", "environment_tested", "unsupported"]},
+          "notes": {"type": "string"}
+        }
+      }
+    },
+    "validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "last_verified"],
+      "properties": {
+        "status": {"enum": ["not_run", "passed", "failed"]},
+        "last_verified": {"type": ["string", "null"], "format": "date"},
+        "evidence": {"type": ["string", "null"]}
+      }
+    },
+    "gaps": {"type": "array", "items": {"type": "string"}}
+  }
+}
+

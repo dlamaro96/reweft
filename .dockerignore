@@ -1,0 +1,17 @@
+.git
+.github
+.env
+.data
+.secrets
+.artifacts
+.support-bundles
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.venv
+**/node_modules
+**/dist
+**/coverage
+**/test-results
+**/playwright-report
+

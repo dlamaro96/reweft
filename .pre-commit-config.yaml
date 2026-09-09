@@ -1,0 +1,14 @@
+repos:
+  - repo: local
+    hooks:
+      - id: reweft-contracts
+        name: validate Reweft contracts
+        entry: uv run --with pyyaml --with jsonschema python tests/contracts/validate_contracts.py
+        language: system
+        pass_filenames: false
+      - id: reweft-secret-patterns
+        name: basic tracked-tree secret patterns
+        entry: scripts/release-check.sh
+        language: system
+        pass_filenames: false
+

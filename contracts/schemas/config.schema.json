@@ -1,0 +1,131 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://reweft.dev/contracts/config.schema.json",
+  "title": "Reweft workspace configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "inference", "source_policies", "privacy"],
+  "properties": {
+    "schema_version": {"const": "reweft.config/v1"},
+    "workspace": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {"type": "string", "minLength": 1, "maxLength": 100},
+        "mode": {"enum": ["assessment", "synthetic_demo"]}
+      }
+    },
+    "inference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "profiles", "roles"],
+      "properties": {
+        "mode": {"enum": ["configured", "disabled", "synthetic_demo"]},
+        "default_profile": {"type": ["string", "null"]},
+        "profiles": {
+          "type": "object",
+          "additionalProperties": {"$ref": "#/$defs/modelProfile"}
+        },
+        "roles": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "planner": {"type": "string"},
+            "semantic_analyst": {"type": "string"},
+            "code_generator": {"type": "string"},
+            "verifier": {"type": "string"},
+            "narrator": {"type": "string"}
+          }
+        }
+      }
+    },
+    "source_policies": {
+      "type": "object",
+      "additionalProperties": {"$ref": "#/$defs/sourcePolicy"},
+      "required": ["default"]
+    },
+    "privacy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["raw_model_payload_logging", "public_web_research", "raw_row_egress", "cross_provider_fallback"],
+      "properties": {
+        "raw_model_payload_logging": {"type": "boolean", "default": false},
+        "public_web_research": {"type": "boolean", "default": false},
+        "raw_row_egress": {"type": "boolean", "default": false},
+        "cross_provider_fallback": {"type": "boolean", "default": false}
+      }
+    }
+  },
+  "$defs": {
+    "modelProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "model", "tls_verify", "allowed_data_classes", "capabilities", "limits", "fallback_profiles"],
+      "properties": {
+        "provider": {"enum": ["openai", "azure_openai", "anthropic", "google", "vertex", "bedrock", "openai_compatible"]},
+        "endpoint_type": {"enum": ["responses", "chat_completions", "native", "deployment"]},
+        "base_url": {
+          "type": "string",
+          "anyOf": [
+            {"format": "uri", "pattern": "^https?://"},
+            {"pattern": "^\\$\\{[A-Z][A-Z0-9_]*\\}$"}
+          ]
+        },
+        "model": {"type": "string", "minLength": 1},
+        "deployment": {"type": "string", "minLength": 1},
+        "credential_ref": {"type": "string", "pattern": "^secret://[A-Za-z0-9._/-]+$"},
+        "region": {"type": "string", "minLength": 1},
+        "api_version": {"type": "string", "minLength": 1},
+        "tls_verify": {"const": true},
+        "allowed_data_classes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"enum": ["metadata", "source_code", "aggregates", "sample_rows", "restricted_metadata"]}
+        },
+        "capabilities": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode"],
+          "properties": {
+            "mode": {"enum": ["probe", "declared"]},
+            "structured_output": {"type": "boolean"},
+            "tool_calling": {"type": "boolean"},
+            "streaming": {"type": "boolean"}
+          }
+        },
+        "limits": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["max_concurrent_requests", "max_output_tokens", "max_requests_per_run"],
+          "properties": {
+            "max_concurrent_requests": {"type": "integer", "minimum": 1, "maximum": 64},
+            "max_output_tokens": {"type": "integer", "minimum": 1},
+            "max_requests_per_run": {"type": "integer", "minimum": 1},
+            "max_wall_time_seconds": {"type": "integer", "minimum": 1},
+            "max_input_tokens_per_run": {"type": "integer", "minimum": 1},
+            "max_cost_minor_units": {"type": "integer", "minimum": 0},
+            "currency": {"type": "string", "pattern": "^[A-Z]{3}$"}
+          }
+        },
+        "fallback_profiles": {"type": "array", "uniqueItems": true, "items": {"type": "string"}}
+      }
+    },
+    "sourcePolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "max_active_operations", "min_request_interval_ms", "max_response_bytes", "max_pages_per_operation", "request_deadline_seconds", "max_attempts", "on_unknown_execution", "on_missing_health", "profiling_enabled"],
+      "properties": {
+        "mode": {"const": "metadata_only"},
+        "max_active_operations": {"type": "integer", "minimum": 1},
+        "min_request_interval_ms": {"type": "integer", "minimum": 0},
+        "max_response_bytes": {"type": "integer", "minimum": 1024},
+        "max_pages_per_operation": {"type": "integer", "minimum": 1},
+        "request_deadline_seconds": {"type": "integer", "minimum": 1},
+        "max_attempts": {"type": "integer", "minimum": 1, "maximum": 10},
+        "on_unknown_execution": {"const": "retain_capacity_and_reconcile"},
+        "on_missing_health": {"const": "conservative"},
+        "profiling_enabled": {"type": "boolean", "default": false}
+      }
+    }
+  }
+}

@@ -1,0 +1,22 @@
+name: Connector request
+description: Request real connector scope without implying implementation.
+title: "[Connector]: "
+labels: [connector]
+body:
+  - type: input
+    id: platform
+    attributes: {label: Platform and exact version}
+    validations: {required: true}
+  - type: textarea
+    id: operations
+    attributes: {label: Required read-only operations and supported interfaces}
+    validations: {required: true}
+  - type: textarea
+    id: validation
+    attributes: {label: Legal fixture and live-test environment availability}
+    validations: {required: true}
+  - type: textarea
+    id: limits
+    attributes: {label: Permissions, cancellation, throttling, licensing, and known gaps}
+    validations: {required: true}
+

@@ -1,0 +1,12 @@
+schema_version: reweft.synthetic-source-behavior/v1
+id: degrading-metadata
+fixture: synthetic
+sequence:
+  - {request: 1, latency_ms: 40, outcome: success}
+  - {request: 2, latency_ms: 400, outcome: success}
+  - {request: 3, latency_ms: 3000, outcome: client_timeout, source_terminal_state: unknown}
+expected_policy_response:
+  increase_capacity: false
+  retain_uncertain_slot: true
+  next_operation: deferred
+

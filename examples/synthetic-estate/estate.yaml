@@ -1,0 +1,33 @@
+schema_version: reweft.synthetic-estate/v1
+estate_id: loomworks-v1
+label: SYNTHETIC DEMONSTRATION — NOT LIVE EVIDENCE
+fictional: true
+systems:
+  - id: pg-operations
+    kind: postgresql
+    environment: synthetic
+    resources: [warehouse-backend]
+    behavior_profile: degrading-metadata
+  - id: bw-archive
+    kind: sap_bw_artifact
+    environment: synthetic
+    live_connection: false
+  - id: atlas-reporting
+    kind: reporting_artifact
+    environment: synthetic
+  - id: courier-export
+    kind: external_consumer
+    environment: synthetic
+expected_cases:
+  conflicting_metrics: [metric-invoice-net, metric-adjusted-net]
+  non_additive_measures: [inventory-on-hand]
+  duplicate_mappings: [product-crosswalk-duplicate]
+  mismatched_keys: [customer-key-padding]
+  history_gap: [orders-current-only]
+  sparse_usage: [report-annual-trade]
+  outbound_dependency: [carrier-dispatch-file]
+  unresolved_dynamic_logic: [routine-dynamic-rate]
+  malicious_content: [comment-ignore-controls]
+  incomplete_permissions: [coverage-finance-denied]
+  degrading_source: [degrading-metadata]
+

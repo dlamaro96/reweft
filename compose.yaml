@@ -1,0 +1,128 @@
+name: reweft
+
+services:
+  gateway:
+    build:
+      context: .
+      dockerfile: deploy/docker/frontend.Dockerfile
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${REWEFT_HTTP_PORT:-8080}:8080"
+    networks: [edge, application]
+    read_only: true
+    tmpfs: [/var/cache/nginx, /var/run]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: deploy/docker/backend.Dockerfile
+    command: ["uvicorn", "reweft.api.app:app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log"]
+    environment:
+      REWEFT_MODE: ${REWEFT_MODE:-synthetic_demo}
+      REWEFT_CONFIG_PATH: ${REWEFT_CONFIG_PATH:-/app/config/demo.yaml}
+      REWEFT_SECRET_KEY: ${REWEFT_SECRET_KEY:?bootstrap must set REWEFT_SECRET_KEY}
+      REWEFT_PERMIT_SIGNING_KEY: ${REWEFT_SECRET_KEY:?bootstrap must set REWEFT_SECRET_KEY}
+      REWEFT_DATABASE_PATH: /var/lib/reweft/evidence/reweft.db
+      TEMPORAL_ADDRESS: ${TEMPORAL_ADDRESS:-temporal:7233}
+    volumes:
+      - evidence:/var/lib/reweft/evidence
+      - ./examples/configurations:/app/config:ro
+      - ./examples/synthetic-estate:/app/synthetic-estate:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    networks: [application]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+
+  analysis-worker:
+    profiles: [workers]
+    build:
+      context: .
+      dockerfile: deploy/docker/backend.Dockerfile
+    command: ["python", "-m", "reweft.orchestration.worker"]
+    environment:
+      REWEFT_SECRET_KEY: ${REWEFT_SECRET_KEY:?bootstrap must set REWEFT_SECRET_KEY}
+      DATABASE_URL: ${DATABASE_URL:?bootstrap must set DATABASE_URL}
+      TEMPORAL_ADDRESS: ${TEMPORAL_ADDRESS:-temporal:7233}
+    volumes: [evidence:/var/lib/reweft/evidence]
+    depends_on:
+      postgres: {condition: service_healthy}
+      temporal: {condition: service_started}
+    networks: [application]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+
+  collector:
+    profiles: [workers]
+    build:
+      context: .
+      dockerfile: deploy/docker/backend.Dockerfile
+    command: ["python", "-m", "reweft.connectors.worker"]
+    environment:
+      REWEFT_SECRET_KEY: ${REWEFT_SECRET_KEY:?bootstrap must set REWEFT_SECRET_KEY}
+      DATABASE_URL: ${DATABASE_URL:?bootstrap must set DATABASE_URL}
+      TEMPORAL_ADDRESS: ${TEMPORAL_ADDRESS:-temporal:7233}
+    volumes: [evidence:/var/lib/reweft/evidence]
+    depends_on:
+      postgres: {condition: service_healthy}
+      temporal: {condition: service_started}
+    networks: [application, collectors]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+
+  postgres:
+    profiles: [durable, workers]
+    image: postgres:16.6-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-reweft}
+      POSTGRES_DB: ${POSTGRES_DB:-reweft}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?bootstrap must set POSTGRES_PASSWORD}
+      TEMPORAL_DB_USER: ${TEMPORAL_DB_USER:-temporal}
+      TEMPORAL_DB_NAME: ${TEMPORAL_DB_NAME:-temporal}
+      TEMPORAL_DB_PASSWORD: ${TEMPORAL_DB_PASSWORD:?bootstrap must set TEMPORAL_DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./deploy/docker/init-databases.sh:/docker-entrypoint-initdb.d/10-init-databases.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [application]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+
+  temporal:
+    profiles: [workers]
+    image: temporalio/auto-setup:1.27.2
+    environment:
+      DB: postgres12
+      DB_PORT: 5432
+      POSTGRES_SEEDS: postgres
+      POSTGRES_USER: ${TEMPORAL_DB_USER:-temporal}
+      POSTGRES_PWD: ${TEMPORAL_DB_PASSWORD:?bootstrap must set TEMPORAL_DB_PASSWORD}
+      DBNAME: ${TEMPORAL_DB_NAME:-temporal}
+    depends_on:
+      postgres: {condition: service_healthy}
+    networks: [application]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+
+networks:
+  edge: {}
+  application:
+    internal: true
+  collectors:
+    internal: true
+
+volumes:
+  postgres_data: {}
+  evidence: {}

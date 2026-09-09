@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 112" role="img" aria-labelledby="title desc">
+  <title id="title">Reweft</title>
+  <desc id="desc">Reweft wordmark and woven thread symbol.</desc>
+  <g transform="translate(8 8) scale(.9)">
+    <rect width="96" height="96" rx="24" fill="#F6F3EC"/>
+    <path d="M25 20v38c0 12 7 18 18 18h28" fill="none" stroke="#15352F" stroke-width="9" stroke-linecap="round"/>
+    <path d="M71 20v27c0 8-5 13-13 13H38c-8 0-13-5-13-13" fill="none" stroke="#1F7668" stroke-width="9" stroke-linecap="round"/>
+    <path d="M43 20v14c0 8 5 13 13 13h15" fill="none" stroke="#DF6C4F" stroke-width="9" stroke-linecap="round"/>
+  </g>
+  <text x="118" y="71" fill="#15352F" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="62" font-weight="650" letter-spacing="-2">Reweft</text>
+  <text x="122" y="98" fill="#59706B" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="14" letter-spacing=".4">UNDERSTAND YOUR ESTATE. DESIGN WHAT COMES NEXT.</text>
+</svg>
+

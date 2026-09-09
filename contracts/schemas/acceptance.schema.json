@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://reweft.dev/contracts/acceptance.schema.json",
+  "title": "Reweft acceptance registry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "updated_at", "status_definitions", "checks"],
+  "properties": {
+    "schema_version": {"const": "reweft.acceptance/v1"},
+    "updated_at": {"type": "string", "format": "date-time"},
+    "status_definitions": {
+      "type": "object",
+      "additionalProperties": {"type": "string"},
+      "required": ["passed", "failed", "not_run", "not_live_verified"]
+    },
+    "checks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "requirement", "implementation_paths", "tests", "execution", "evidence_artifact", "release_blocking"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^[A-Z]+-[0-9]{2}$"},
+          "requirement": {"type": "string", "minLength": 1},
+          "implementation_paths": {"type": "array", "items": {"type": "string"}},
+          "tests": {"type": "array", "items": {"type": "string"}},
+          "execution": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["status", "reason"],
+            "properties": {
+              "status": {"enum": ["passed", "failed", "not_run", "not_live_verified"]},
+              "reason": {"type": "string", "minLength": 1},
+              "command": {"type": "string"},
+              "executed_at": {"type": ["string", "null"]},
+              "environment": {"type": "string"}
+            }
+          },
+          "evidence_artifact": {"type": ["string", "null"]},
+          "release_blocking": {"type": "boolean"}
+        }
+      }
+    }
+  }
+}

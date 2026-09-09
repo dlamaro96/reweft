@@ -1,0 +1,6 @@
+source_system,source_product_key,canonical_product_id,mapping_state
+pg-operations,P-100,product-thread-fastener,asserted
+bw-archive,000100,product-thread-fastener,inferred
+bw-archive,000101,product-thread-fastener,inferred
+pg-operations,000200,product-weft-tensioner,asserted
+

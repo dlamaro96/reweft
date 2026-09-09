@@ -1,0 +1,12 @@
+schema_version: reweft.coverage/v1
+fixture: synthetic
+source_id: pg-operations
+collection_interval: {started_at: 2026-02-28T08:00:00Z, ended_at: 2026-02-28T08:00:12Z}
+areas:
+  - {object_type: table, scope: loomworks, known_denominator: 7, collected: 6, inaccessible: 1, status: partial}
+gaps:
+  - id: coverage-finance-denied
+    locator: postgresql://pg-operations/loomworks/private_finance
+    status: permission_denied
+    deletion_claim: false
+

@@ -1,0 +1,20 @@
+schema_version: reweft.connector/v1
+id: sap-bw-definition-import
+display_name: SAP BW definition import
+kind: artifact_import
+release_visibility: hidden
+maturity: design
+configuration_schema: null
+operations:
+  - {id: inspect_artifact, mode: artifact_parse, controller_required: true, cancellation: not_applicable}
+  - {id: import_definitions, mode: artifact_parse, controller_required: true, cancellation: not_applicable}
+validation:
+  fixture: not_run
+  live: unavailable
+  last_verified: null
+  evidence: null
+limitations:
+  - No proprietary SAP export or binary is bundled.
+  - Fixture coverage cannot establish compatibility with a live BW or BW/4HANA release.
+  - Dynamic ABAP and routines may remain unresolved.
+

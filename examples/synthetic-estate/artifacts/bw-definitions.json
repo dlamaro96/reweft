@@ -1,0 +1,29 @@
+{
+  "fixture": "synthetic",
+  "system": "bw-archive",
+  "export_format": "reweft-synthetic-bw/v1",
+  "objects": [
+    {
+      "id": "ZLW_SALES_CUBE",
+      "kind": "infoprovider_definition",
+      "history_boundary": "2018-01-01/2025-12-31",
+      "fields": ["0CALMONTH", "ZCUSTOMER", "ZPRODUCT", "ZNET_AMT"]
+    },
+    {
+      "id": "ZLW_NET_QUERY",
+      "kind": "query_definition",
+      "source": "ZLW_SALES_CUBE",
+      "calculated_key_figures": [
+        {"id": "NET_REVENUE", "expression": "SUM(ZNET_AMT)"},
+        {"id": "ADJUSTED_NET_REVENUE", "expression": "SUM(ZNET_AMT) + MONTHLY_ADJUSTMENT"}
+      ]
+    },
+    {
+      "id": "ZLW_DYNAMIC_RATE",
+      "kind": "routine_reference",
+      "resolution": "unresolved",
+      "reason": "Runtime-selected rate table is not present in this export."
+    }
+  ]
+}
+

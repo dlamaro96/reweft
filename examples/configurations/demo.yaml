@@ -1,0 +1,26 @@
+schema_version: reweft.config/v1
+workspace:
+  name: Reweft Synthetic Demonstration
+  mode: synthetic_demo
+inference:
+  mode: synthetic_demo
+  default_profile: null
+  profiles: {}
+  roles: {}
+source_policies:
+  default:
+    mode: metadata_only
+    max_active_operations: 1
+    min_request_interval_ms: 2000
+    max_response_bytes: 4194304
+    max_pages_per_operation: 20
+    request_deadline_seconds: 30
+    max_attempts: 2
+    on_unknown_execution: retain_capacity_and_reconcile
+    on_missing_health: conservative
+    profiling_enabled: false
+privacy:
+  raw_model_payload_logging: false
+  public_web_research: false
+  raw_row_egress: false
+  cross_provider_fallback: false

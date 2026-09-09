@@ -1,0 +1,14 @@
+schema_version: reweft.target-capability/v1
+id: local-duckdb
+display_name: Open local DuckDB target
+adapter_status: design
+capabilities:
+  - {id: specification_export, support: planned, notes: Versioned target-neutral YAML and evidence links.}
+  - {id: sql_models, support: planned, notes: DuckDB-compatible SQL generated from deterministic templates.}
+  - {id: fixture_execution, support: planned, notes: Execution is limited to isolated synthetic fixtures.}
+  - {id: orchestration, support: planned, notes: Local executable definitions; no enterprise-scale claim.}
+validation: {status: not_run, last_verified: null, evidence: null}
+gaps:
+  - No workload-scale or production-operability validation has run.
+  - This demonstration target is not a universal replacement recommendation.
+

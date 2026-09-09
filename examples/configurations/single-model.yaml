@@ -1,0 +1,46 @@
+schema_version: reweft.config/v1
+workspace:
+  name: Example assessment
+  mode: assessment
+inference:
+  mode: configured
+  default_profile: primary
+  profiles:
+    primary:
+      provider: openai_compatible
+      endpoint_type: chat_completions
+      base_url: ${REWEFT_INFERENCE_BASE_URL}
+      model: ${REWEFT_INFERENCE_MODEL}
+      credential_ref: secret://inference/primary
+      tls_verify: true
+      allowed_data_classes: [metadata, source_code]
+      capabilities: {mode: probe}
+      limits:
+        max_concurrent_requests: 2
+        max_output_tokens: 4096
+        max_requests_per_run: 200
+      fallback_profiles: []
+  roles:
+    planner: primary
+    semantic_analyst: primary
+    code_generator: primary
+    verifier: primary
+    narrator: primary
+source_policies:
+  default:
+    mode: metadata_only
+    max_active_operations: 1
+    min_request_interval_ms: 2000
+    max_response_bytes: 4194304
+    max_pages_per_operation: 20
+    request_deadline_seconds: 30
+    max_attempts: 2
+    on_unknown_execution: retain_capacity_and_reconcile
+    on_missing_health: conservative
+    profiling_enabled: false
+privacy:
+  raw_model_payload_logging: false
+  public_web_research: false
+  raw_row_egress: false
+  cross_provider_fallback: false
+

@@ -1,0 +1,17 @@
+schema_version: reweft.connector/v1
+id: openlineage
+display_name: OpenLineage event import
+kind: lineage_import
+release_visibility: hidden
+maturity: design
+configuration_schema: null
+operations:
+  - {id: import_events, mode: lineage_import, controller_required: true, cancellation: not_applicable}
+validation:
+  fixture: not_run
+  live: not_run
+  last_verified: null
+  evidence: null
+limitations:
+  - Namespace mapping and event provenance must be supplied; events do not prove a complete estate inventory.
+

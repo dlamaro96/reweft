@@ -1,0 +1,19 @@
+schema_version: reweft.connector/v1
+id: sap-bw-live
+display_name: SAP BW live collector
+kind: optional_runtime
+release_visibility: hidden
+maturity: design
+configuration_schema: null
+operations:
+  - {id: test_connection, mode: metadata_read, controller_required: true, cancellation: unsupported}
+  - {id: discover_definitions, mode: metadata_read, controller_required: true, cancellation: unsupported}
+validation:
+  fixture: not_run
+  live: unavailable
+  last_verified: null
+  evidence: null
+limitations:
+  - Requires operator-supplied SAP JCo under SAP licensing terms; the binary is not redistributable here.
+  - Live interface, authorization, version, load behavior, and cancellation are not validated.
+
