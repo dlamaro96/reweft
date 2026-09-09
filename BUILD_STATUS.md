@@ -2,7 +2,7 @@
 
 Last updated: 2026-09-09
 
-Reweft is a pre-release implementation in active construction. No release has been published, no container image has been pushed, no public repository has been configured, and no production/live-system certification is claimed.
+Reweft is a pre-release implementation in active construction. The source repository is public, but no release or container image has been published and no production/live-system certification is claimed.
 
 ## Status vocabulary
 
@@ -22,8 +22,9 @@ The current default Compose model covers only the synthetic gateway/API path. Th
 
 ## Publication
 
-- Git remote: not configured at bootstrap.
-- GitHub owner/repository metadata: not verified or published.
+- Git remote: `https://github.com/dlamaro96/reweft.git` (`main`).
+- Public source: https://github.com/dlamaro96/reweft under the authenticated `dlamaro96` account.
+- Repository features: Issues, Discussions, and private vulnerability reporting enabled.
 - Release and image locations: none.
 - Supported production versions: none; pre-release only.
 
@@ -36,8 +37,11 @@ The current default Compose model covers only the synthetic gateway/API path. Th
 | `tests/contracts/validate_contracts.py` via uv with PyYAML/jsonschema | Passed | JSON Schema/YAML and acceptance-registry structure only. |
 | `scripts/release-check.sh` | Passed | Required policy files and a small private-key/AWS-key pattern set only; not a complete secret scan. |
 | `uv run --project backend --extra dev pytest` | Passed: 9 tests | Local Python 3.12.10; API, connector-runtime, and source-controller tests. Two upstream deprecation warnings were emitted. This is not the full acceptance suite. |
+| `npm test` in pinned Node 22.22.2 container | Passed: 6 tests | Synthetic UI rendering and interaction coverage; not full browser E2E or accessibility certification. |
+| `npm run build` in pinned Node 22.22.2 container | Passed | Strict TypeScript check and production Vite build. |
 | API and gateway image build | Passed | Local ARM64 Docker/Colima build; no image publication, SBOM, signing, or multi-architecture test. |
 | `./scripts/bootstrap.sh --demo` twice | Passed | Local existing-machine run, not a clean-machine installation test. Second run preserved the `.env` content hash and existing named volume. |
 | `scripts/smoke-test.sh` and demo snapshot request | Passed | Local HTTP health/root plus `mode=synthetic-demo`; not full browser/E2E/accessibility validation. |
+| Desktop and mobile in-app browser inspection | Passed for inspected routes | 1440×900 overview and 390×844 connections workspace; synthetic fixture only. Captures are under `docs/assets/screenshots/`. |
 
 The local default demo was left running at `http://127.0.0.1:8080` for inspection. These checks do not advance the composite release checks in `contracts/acceptance.yaml`.
