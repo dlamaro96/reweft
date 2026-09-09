@@ -24,6 +24,7 @@ The current default Compose model covers only the synthetic gateway/API path. Th
 
 - Git remote: `https://github.com/dlamaro96/reweft.git` (`main`).
 - Public source: https://github.com/dlamaro96/reweft under the authenticated `dlamaro96` account.
+- Published documentation: https://dlamaro96.github.io/reweft/ from the `docs/` directory on `main`.
 - Repository features: Issues, Discussions, and private vulnerability reporting enabled. `main` requires the three CI job contexts, linear history, and resolved review conversations; force-push and deletion are disabled. Repository administrators retain the documented emergency bypass.
 - Release and image locations: none.
 - Supported production versions: none; pre-release only.

@@ -6,7 +6,7 @@ Reweft is an open-source, self-hosted application for evidence-backed data-estat
 
 > **Development status:** pre-release. The repository is under active construction. Do not infer live connector certification or production readiness from an adapter, manifest, fixture, or passing unit test. See [BUILD_STATUS.md](BUILD_STATUS.md) and [contracts/acceptance.yaml](contracts/acceptance.yaml).
 
-Public repository: [github.com/dlamaro96/reweft](https://github.com/dlamaro96/reweft)
+Public repository: [github.com/dlamaro96/reweft](https://github.com/dlamaro96/reweft) · Documentation: [dlamaro96.github.io/reweft](https://dlamaro96.github.io/reweft/)
 
 ## Quick start
 
