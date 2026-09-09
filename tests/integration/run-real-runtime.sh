@@ -82,6 +82,7 @@ assessment_output="tests/integration/evidence/assessment-${timestamp}-$$.json"
 python3 tests/integration/run_assessment.py \
   --env-file "$runtime_env" \
   --output "$assessment_output"
+REWEFT_REAL_ENV_FILE="$runtime_env" ./scripts/real-runtime-ready.sh
 echo "Integration harness passed; sanitized evidence: $output"
 echo "Assessment evidence: $assessment_output"
 echo "Services remain running and no volumes or configuration were deleted."

@@ -42,8 +42,23 @@ if [ "$mode" = demo ]; then
   sed -i.bak 's/^REWEFT_MODE=.*/REWEFT_MODE=synthetic_demo/' .env && rm -f .env.bak
 fi
 
-docker compose --env-file .env config >/dev/null
-docker compose --env-file .env up --build --detach
+# Compose interpolates the complete model before it filters inactive profiles.
+# Supply inert values only to that interpolation process so the default/demo
+# stack does not require real-runtime credentials. These values are never
+# written to .env and no real-runtime service is selected by this bootstrap.
+compose_default() {
+  REWEFT_APP_DB_PASSWORD=inactive-profile-placeholder \
+  REWEFT_BOOTSTRAP_TOKEN=inactive-profile-placeholder \
+  REWEFT_COLLECTOR_SERVICE_TOKEN=inactive-profile-placeholder \
+  REWEFT_ANALYSIS_SERVICE_TOKEN=inactive-profile-placeholder \
+  REWEFT_DB_ADMIN_PASSWORD=inactive-profile-placeholder \
+  REWEFT_SOURCE_ADMIN_PASSWORD=inactive-profile-placeholder \
+  REWEFT_SOURCE_READER_PASSWORD=inactive-profile-placeholder \
+    docker compose --env-file .env "$@"
+}
+
+compose_default config >/dev/null
+compose_default up --build --detach
 
 port=$(awk -F= '$1=="REWEFT_HTTP_PORT" {print $2}' .env)
 port=${port:-8080}

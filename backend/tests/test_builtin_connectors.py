@@ -57,3 +57,39 @@ def test_artifact_bundle_denies_symlinks(tmp_path):
     with pytest.raises(ConnectorError) as denied:
         ArtifactBundleCollector(tmp_path).collect(ArtifactBundleConfiguration(bundle_id="atlas"))
     assert denied.value.code == "BUNDLE_SYMLINK_DENIED"
+
+
+@pytest.mark.parametrize(
+    ("filename", "contents", "configuration", "code"),
+    [
+        ("one.sql", b"select 1", {"max_files": 1}, "BUNDLE_FILE_LIMIT"),
+        ("large.sql", b"select 123456789", {"max_file_bytes": 4}, "BUNDLE_FILE_LIMIT"),
+        ("binary.sql", b"select\x00secret", {}, "BUNDLE_BINARY_DENIED"),
+        ("script.py", b"print('never')", {}, "BUNDLE_TYPE_DENIED"),
+    ],
+)
+def test_artifact_bundle_enforces_count_size_binary_and_type_limits(
+    tmp_path, filename, contents, configuration, code
+):
+    bundle = tmp_path / "atlas"
+    bundle.mkdir()
+    (bundle / filename).write_bytes(contents)
+    if code == "BUNDLE_FILE_LIMIT" and filename == "one.sql":
+        (bundle / "two.sql").write_text("select 2", encoding="utf-8")
+    with pytest.raises(ConnectorError) as denied:
+        ArtifactBundleCollector(tmp_path).collect(
+            ArtifactBundleConfiguration(bundle_id="atlas", **configuration)
+        )
+    assert denied.value.code == code
+
+
+def test_artifact_bundle_identifier_cannot_escape_root():
+    with pytest.raises(ValueError):
+        ArtifactBundleConfiguration(bundle_id="../outside")
+
+
+def test_source_endpoint_blocks_cloud_metadata(monkeypatch):
+    monkeypatch.setattr("socket.getaddrinfo", lambda *_: [(None, None, None, None, ("169.254.169.254", 5432))])
+    with pytest.raises(ConnectorError) as denied:
+        SourceEndpointPolicy({"metadata.test:5432"}).validate("metadata.test", 5432)
+    assert denied.value.code == "SOURCE_ENDPOINT_FORBIDDEN"
